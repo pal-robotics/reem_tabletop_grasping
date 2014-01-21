@@ -1,0 +1,7 @@
+#goal def
+int32 target_id
+---
+#result def
+---
+#feedback def
+string status
