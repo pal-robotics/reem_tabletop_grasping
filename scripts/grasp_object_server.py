@@ -39,6 +39,8 @@ from object_recognition_msgs.msg import RecognizedObjectArray
 from object_recognition_clusters import ClusterBoundingBoxFinder
 from actionlib import ActionServer
 from reem_tabletop_grasping.msg import GraspObjectAction 
+from reem_tabletop_grasping.msg import GraspObjectFeedback
+from actionlib_msgs.msg import GoalStatus
 
 class GraspObjectServer:
 
@@ -49,21 +51,44 @@ class GraspObjectServer:
         self.cbbf = ClusterBoundingBoxFinder(self.tf_listener, self.tf_broadcaster)
 #        self.cbbf3d = cluster_bounding_box_finder_3d.ClusterBoundingBoxFinder3D(self.tf_listener)
         self.last_objects = None
-        rospy.Subscriber("object_array", RecognizedObjectArray, self.objects_callback)
+        #rospy.Subscriber("object_array", RecognizedObjectArray, self.objects_callback)
+        rospy.Subscriber("/recognized_object_array", RecognizedObjectArray, self.objects_callback)
         
-        # blocking action server implementation
-        self.grasp_obj_as = ActionServer(name, GraspObjectAction, self.goal_callback, self.cancel_callback)
+        # blocking action server
+        
+        self.grasp_obj_as = ActionServer(name, GraspObjectAction, self.goal_callback, self.cancel_callback, False)
+        self.current_goal = None
+        self.grasp_obj_as.start()
 
     def objects_callback(self, data):
         rospy.loginfo(rospy.get_name() + ": This message contains %d objects." % len(data.objects))
         self.last_objects = data
         
-    def goal_callback(self):
-        None
+    def goal_callback(self, goal):
+        if self.current_goal:
+          goal.set_rejected("Server busy")
+          return
+        elif not self.last_objects:
+          goal.set_rejected("No objects to grasp were received on the objects topic.")
+          return
+        else:
+          #store and accept new goal
+          self.current_goal = goal
+          self.current_goal.set_accepted()
+          #run grasping state machine
+          self.grasping_sm()
+          #finished, get rid of goal
+          self.current_goal = None
         
-    def cancel_callback(self):
-        None
-        # stop motions?
+    def cancel_callback(self, goal):
+        #TODO stop motions?
+        self.current_goal.set_canceled()
+
+    def grasping_sm(self):
+      if self.current_goal:
+        #self.current_goal.set_aborted()
+        rospy.sleep(3.0)
+        self.current_goal.set_succeeded()
 
 if __name__ == '__main__':
     name = 'grasp_object_server'
