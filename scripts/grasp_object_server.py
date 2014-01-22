@@ -128,10 +128,14 @@ class GraspObjectServer:
         self.current_goal.publish_feedback(self.feedback)
         
     def generate_grasps(self, pose, width):
+          #transform pose to base_link
+          self.tf_listener.waitForTransform("base_link", pose.header.frame_id, pose.header.stamp, rospy.Duration(5))
+          trans_pose = self.tf_listener.transformPose("base_link", pose)
+          #send request to block grasp generator service
           self.grasps_ac.wait_for_server()
           rospy.loginfo("Succesfully connected.")
           goal = GenerateBlockGraspsGoal()
-          goal.pose = pose.pose
+          goal.pose = trans_pose.pose
           goal.width = width
           self.grasps_ac.send_goal(goal)
           rospy.loginfo("Sent goal, waiting:\n" + str(goal))
