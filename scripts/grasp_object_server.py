@@ -33,14 +33,22 @@
 #
 # author: Bence Magyar
 
+#ros imports
 import rospy
 import tf
-from object_recognition_msgs.msg import RecognizedObjectArray
-from object_recognition_clusters import ClusterBoundingBoxFinder
-from actionlib import ActionServer
+from actionlib import ActionServer, SimpleActionClient
+from actionlib import ServerGoalHandle
+#own imports
 from reem_tabletop_grasping.msg import GraspObjectAction 
 from reem_tabletop_grasping.msg import GraspObjectFeedback
-from actionlib_msgs.msg import GoalStatus
+#perception imports & grasp planning imports
+from object_recognition_msgs.msg import RecognizedObjectArray
+from object_recognition_clusters import ClusterBoundingBoxFinder
+from block_grasp_generator.msg import GenerateBlockGraspsAction, GenerateBlockGraspsGoal, GenerateBlockGraspsResult
+#manipulation imports
+from moveit_msgs.msg import Grasp, PickupAction, PickupGoal, PickupResult, GripperTranslation, MoveItErrorCodes
+from moveit_commander import RobotCommander, PlanningSceneInterface
+from reem_tabletop_grasping.msg._GraspObjectActionGoal import GraspObjectActionGoal
 
 class GraspObjectServer:
 
@@ -49,13 +57,20 @@ class GraspObjectServer:
         self.tf_listener = tf.TransformListener()
         self.tf_broadcaster = tf.TransformBroadcaster()
         self.cbbf = ClusterBoundingBoxFinder(self.tf_listener, self.tf_broadcaster)
-#        self.cbbf3d = cluster_bounding_box_finder_3d.ClusterBoundingBoxFinder3D(self.tf_listener)
-        self.last_objects = None
+        self.last_objects = RecognizedObjectArray()
         #rospy.Subscriber("object_array", RecognizedObjectArray, self.objects_callback)
         rospy.Subscriber("/recognized_object_array", RecognizedObjectArray, self.objects_callback)
         
-        # blocking action server
+        rospy.loginfo("Connecting to pickup AS")
+        self.pickup_ac = SimpleActionClient('/pickup', PickupAction)
+        #pickup_ac.wait_for_server() # needed?
         
+        rospy.loginfo("Connecting to grasp generator AS")
+        self.grasps_ac = SimpleActionClient('/grasp_generator_server/generate', GenerateBlockGraspsAction)
+        #grasps_ac.wait_for_server() # needed? 
+        
+        
+        # blocking action server
         self.grasp_obj_as = ActionServer(name, GraspObjectAction, self.goal_callback, self.cancel_callback, False)
         self.feedback = GraspObjectFeedback()
         self.current_goal = None
@@ -65,11 +80,11 @@ class GraspObjectServer:
         rospy.loginfo(rospy.get_name() + ": This message contains %d objects." % len(data.objects))
         self.last_objects = data
         
-    def goal_callback(self, goal):
+    def goal_callback(self, goal):      
         if self.current_goal:
           goal.set_rejected("Server busy")
           return
-        elif not self.last_objects:
+        elif len(self.last_objects.objects) - 1 < goal.get_goal().target_id:
           goal.set_rejected("No objects to grasp were received on the objects topic.")
           return
         else:
@@ -88,6 +103,7 @@ class GraspObjectServer:
     def grasping_sm(self):
       if self.current_goal:
         self.update_feedback("Running clustering")
+        #self.cbbf.find_object_frame_and_bounding_box(self.last_objects)
         #self.current_goal.set_aborted()
         rospy.sleep(1.0)
         self.update_feedback("check reachability")
@@ -110,4 +126,3 @@ if __name__ == '__main__':
     server = GraspObjectServer(name)
     rospy.loginfo(name + ": Ready to roll.")
     rospy.spin()
-
