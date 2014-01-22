@@ -57,6 +57,7 @@ class GraspObjectServer:
         # blocking action server
         
         self.grasp_obj_as = ActionServer(name, GraspObjectAction, self.goal_callback, self.cancel_callback, False)
+        self.feedback = GraspObjectFeedback()
         self.current_goal = None
         self.grasp_obj_as.start()
 
@@ -86,9 +87,22 @@ class GraspObjectServer:
 
     def grasping_sm(self):
       if self.current_goal:
+        self.update_feedback("Running clustering")
         #self.current_goal.set_aborted()
-        rospy.sleep(3.0)
+        rospy.sleep(1.0)
+        self.update_feedback("check reachability")
+        rospy.sleep(1.0)
+        self.update_feedback("generate grasps")
+        rospy.sleep(1.0)
+        self.update_feedback("setup planning scene")
+        rospy.sleep(1.0)
+        self.update_feedback("execute grasps")
+        rospy.sleep(1.0)
         self.current_goal.set_succeeded()
+        
+    def update_feedback(self, text):
+        self.feedback.last_state = text
+        self.current_goal.publish_feedback(self.feedback)
 
 if __name__ == '__main__':
     name = 'grasp_object_server'
