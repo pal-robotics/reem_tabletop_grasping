@@ -34,9 +34,7 @@ add_action_files(
 ## Generate added messages and services with any dependencies listed here
 generate_messages(
  DEPENDENCIES
- std_msgs
- object_recognition_msgs
-#  geometry_msgs#   moveit_msgs#   object_recognition_msgs#   std_msgs#   trajectory_msgs
+ std_msgs object_recognition_msgs moveit_msgs  geometry_msgs
 )
 
 catkin_package(

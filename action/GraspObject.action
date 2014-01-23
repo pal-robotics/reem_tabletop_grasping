@@ -2,6 +2,11 @@
 int32 target_id
 ---
 #result def
+string object_scene_name
+geometry_msgs/PoseStamped object_pose
+geometry_msgs/Point bounding_box
+moveit_msgs/Grasp[] grasps
 ---
 #feedback def
 string last_state
+moveit_msgs/Grasp[] grasps
