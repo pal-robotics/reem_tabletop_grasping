@@ -1,0 +1,10 @@
+<launch>
+  <!-- Launch table detection + clustering with object recognition kitchen -->
+<!--
+  <node name="tabletop_clustering" pkg="object_recognition_ros" type="server" args="-c $(find reem_object_recognition)/config/tabletop/detection.clusters.ros.ork.reem"/> 
+-->
+  <!-- -->
+  <node name="grasp_generator_server" pkg="block_grasp_generator" type="block_grasp_generator_server"/>
+  <!-- -->
+  <node name="grasp_object_server" pkg="reem_tabletop_grasping" type="grasp_object_server.py"/>
+</launch>
