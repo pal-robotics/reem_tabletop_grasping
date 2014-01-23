@@ -37,7 +37,7 @@
 import rospy
 import tf
 from actionlib import ActionServer, SimpleActionClient
-from geometry_msgs.msg import PoseArray, Pose
+from geometry_msgs.msg import PoseArray, Pose, Point
 from std_msgs.msg import Header
 #own imports
 from reem_tabletop_grasping.msg import GraspObjectAction 
@@ -49,6 +49,8 @@ from block_grasp_generator.msg import GenerateBlockGraspsAction, GenerateBlockGr
 #manipulation imports
 from moveit_msgs.msg import Grasp, PickupAction, PickupGoal, PickupResult, GripperTranslation, MoveItErrorCodes
 from moveit_commander import RobotCommander, PlanningSceneInterface
+from reem_tabletop_grasping.msg._GraspObjectResult import GraspObjectResult
+import geometry_msgs
 
 
 class GraspObjectServer:
@@ -61,7 +63,7 @@ class GraspObjectServer:
         self.last_objects = RecognizedObjectArray()
         #rospy.Subscriber("object_array", RecognizedObjectArray, self.objects_callback)
         self.sub = rospy.Subscriber("/recognized_object_array", RecognizedObjectArray, self.objects_callback)
-        self.grasp_publisher = rospy.Publisher("grasp_pose_from_block_bla", PoseArray)
+        self.grasp_publisher = rospy.Publisher("generated_grasps", PoseArray)
         
         rospy.loginfo("Connecting to pickup AS")
         self.pickup_ac = SimpleActionClient('/pickup', PickupAction)
@@ -71,16 +73,18 @@ class GraspObjectServer:
         self.grasps_ac = SimpleActionClient('/grasp_generator_server/generate', GenerateBlockGraspsAction)
         #grasps_ac.wait_for_server() # needed? 
         
+        #planning scene for motion planning
+        self.scene = PlanningSceneInterface()
         
         # blocking action server
         self.grasp_obj_as = ActionServer(name, GraspObjectAction, self.goal_callback, self.cancel_callback, False)
         self.feedback = GraspObjectFeedback()
+        self.result = GraspObjectResult()
         self.current_goal = None
         self.grasp_obj_as.start()
 
     def objects_callback(self, data):
         rospy.loginfo(rospy.get_name() + ": This message contains %d objects." % len(data.objects))
-        #rospy.loginfo(data.objects[0].point_clouds[0].header.frame_id)
         self.last_objects = data
         
     def goal_callback(self, goal):      
@@ -106,21 +110,48 @@ class GraspObjectServer:
     def grasping_sm(self):
       if self.current_goal:
         self.update_feedback("Running clustering")
-        (object_points, object_bounding_box_dims, 
+        (object_points, obj_bbox_dims, 
          object_bounding_box, object_pose) = self.cbbf.find_object_frame_and_bounding_box(self.last_objects.objects[self.current_goal.get_goal().target_id].point_clouds[0])
         #TODO visualize bbox
-        print object_bounding_box_dims
+        #TODO publish filtered pointcloud?
+        print obj_bbox_dims
+        
         self.update_feedback("check reachability")
         rospy.sleep(1.0)
+        
         self.update_feedback("generate grasps")
+        #transform pose to base_link
+        self.tf_listener.waitForTransform("base_link", object_pose.header.frame_id, object_pose.header.stamp, rospy.Duration(5))
+        trans_pose = self.tf_listener.transformPose("base_link", object_pose)
+        object_pose = trans_pose
+        # shift object pose up by halfway, clustering code gives obj frame on the bottom because of too much noise on the table cropping (2 1pixel lines behind the objects)
+        object_pose.pose.position.z += obj_bbox_dims[2]/2.0
         # pose + width is the bbox size on x
-        grasp_list = self.generate_grasps(object_pose, object_bounding_box_dims[0])
+        grasp_list = self.generate_grasps(object_pose, obj_bbox_dims[0])
         self.publish_grasps_as_poses(grasp_list)
+        self.feedback.grasps = grasp_list
+        self.current_goal.publish_feedback(self.feedback)
+        self.result.grasps = grasp_list
+        
         self.update_feedback("setup planning scene")
-        rospy.sleep(1.0)
+        #remove old objects
+        self.scene.remove_world_object("object_to_grasp")
+                
+        # add object to grasp to planning scene      
+        self.scene.add_box("object_to_grasp", object_pose, 
+                           (obj_bbox_dims[0], obj_bbox_dims[1], obj_bbox_dims[2]))
+        self.result.object_scene_name = "object_to_grasp"
+        
         self.update_feedback("execute grasps")
         rospy.sleep(1.0)
-        self.current_goal.set_succeeded()
+        self.update_feedback("finished")
+        self.result.object_pose = object_pose
+        #bounding box in a point message
+        self.result.bounding_box = Point()
+        self.result.bounding_box.x = obj_bbox_dims[0]
+        self.result.bounding_box.y = obj_bbox_dims[1]
+        self.result.bounding_box.z = obj_bbox_dims[2]
+        self.current_goal.set_succeeded(result = self.result)
         #self.current_goal.set_aborted()
         
     def update_feedback(self, text):
@@ -128,14 +159,11 @@ class GraspObjectServer:
         self.current_goal.publish_feedback(self.feedback)
         
     def generate_grasps(self, pose, width):
-          #transform pose to base_link
-          self.tf_listener.waitForTransform("base_link", pose.header.frame_id, pose.header.stamp, rospy.Duration(5))
-          trans_pose = self.tf_listener.transformPose("base_link", pose)
           #send request to block grasp generator service
           self.grasps_ac.wait_for_server()
           rospy.loginfo("Succesfully connected.")
           goal = GenerateBlockGraspsGoal()
-          goal.pose = trans_pose.pose
+          goal.pose = pose.pose
           goal.width = width
           self.grasps_ac.send_goal(goal)
           rospy.loginfo("Sent goal, waiting:\n" + str(goal))
@@ -156,8 +184,6 @@ class GraspObjectServer:
           header.stamp = rospy.Time.now()
           grasp_PA.header = header
           for graspmsg in grasps:
-              #print graspmsg
-              #print type(graspmsg)
               p = Pose(graspmsg.grasp_pose.pose.position, graspmsg.grasp_pose.pose.orientation)
               grasp_PA.poses.append(p)
           self.grasp_publisher.publish(grasp_PA)
