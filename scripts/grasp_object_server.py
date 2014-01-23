@@ -109,41 +109,39 @@ class GraspObjectServer:
 
     def grasping_sm(self):
       if self.current_goal:
-        self.update_feedback("Running clustering")
+        self.update_feedback("running clustering")
         (object_points, obj_bbox_dims, 
          object_bounding_box, object_pose) = self.cbbf.find_object_frame_and_bounding_box(self.last_objects.objects[self.current_goal.get_goal().target_id].point_clouds[0])
         #TODO visualize bbox
         #TODO publish filtered pointcloud?
         print obj_bbox_dims
-        
+        ########
         self.update_feedback("check reachability")
-        rospy.sleep(1.0)
-        
+        ########
         self.update_feedback("generate grasps")
         #transform pose to base_link
         self.tf_listener.waitForTransform("base_link", object_pose.header.frame_id, object_pose.header.stamp, rospy.Duration(5))
         trans_pose = self.tf_listener.transformPose("base_link", object_pose)
         object_pose = trans_pose
         # shift object pose up by halfway, clustering code gives obj frame on the bottom because of too much noise on the table cropping (2 1pixel lines behind the objects)
+        # TODO remove this hack, fix it in table filtering
         object_pose.pose.position.z += obj_bbox_dims[2]/2.0
-        # pose + width is the bbox size on x
-        grasp_list = self.generate_grasps(object_pose, obj_bbox_dims[0])
+        grasp_list = self.generate_grasps(object_pose, obj_bbox_dims[0]) # width is the bbox size on x
         self.publish_grasps_as_poses(grasp_list)
         self.feedback.grasps = grasp_list
         self.current_goal.publish_feedback(self.feedback)
         self.result.grasps = grasp_list
-        
+        ########
         self.update_feedback("setup planning scene")
         #remove old objects
         self.scene.remove_world_object("object_to_grasp")
-                
         # add object to grasp to planning scene      
         self.scene.add_box("object_to_grasp", object_pose, 
                            (obj_bbox_dims[0], obj_bbox_dims[1], obj_bbox_dims[2]))
         self.result.object_scene_name = "object_to_grasp"
-        
+        ########
         self.update_feedback("execute grasps")
-        rospy.sleep(1.0)
+        ########
         self.update_feedback("finished")
         self.result.object_pose = object_pose
         #bounding box in a point message
@@ -161,7 +159,7 @@ class GraspObjectServer:
     def generate_grasps(self, pose, width):
           #send request to block grasp generator service
           self.grasps_ac.wait_for_server()
-          rospy.loginfo("Succesfully connected.")
+          rospy.loginfo("Successfully connected.")
           goal = GenerateBlockGraspsGoal()
           goal.pose = pose.pose
           goal.width = width
