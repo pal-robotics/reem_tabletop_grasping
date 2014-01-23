@@ -127,6 +127,10 @@ class GraspObjectServer:
         # TODO remove this hack, fix it in table filtering
         object_pose.pose.position.z += obj_bbox_dims[2]/2.0
         grasp_list = self.generate_grasps(object_pose, obj_bbox_dims[0]) # width is the bbox size on x
+        # check if there are grasps, if not, abort
+        if len(grasp_list) == 0:
+          self.update_aborted("no grasps received")
+          return
         self.publish_grasps_as_poses(grasp_list)
         self.feedback.grasps = grasp_list
         self.current_goal.publish_feedback(self.feedback)
@@ -156,9 +160,14 @@ class GraspObjectServer:
         self.feedback.last_state = text
         self.current_goal.publish_feedback(self.feedback)
         
+    def update_aborted(self, text = ""):
+        self.update_feedback("aborted." + text)
+        self.current_goal.set_aborted()
+        
     def generate_grasps(self, pose, width):
           #send request to block grasp generator service
-          self.grasps_ac.wait_for_server()
+          if not self.grasps_ac.wait_for_server(rospy.Duration(3.0)):
+            return []
           rospy.loginfo("Successfully connected.")
           goal = GenerateBlockGraspsGoal()
           goal.pose = pose.pose
