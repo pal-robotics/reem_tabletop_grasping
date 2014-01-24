@@ -95,10 +95,10 @@ class GraspObjectServer:
         
     def goal_callback(self, goal):      
         if self.current_goal:
-          goal.set_rejected("Server busy")
+          goal.set_rejected() # "Server busy"
           return
         elif len(self.last_objects.objects) - 1 < goal.get_goal().target_id:
-          goal.set_rejected("No objects to grasp were received on the objects topic.")
+          goal.set_rejected() # "No objects to grasp were received on the objects topic."
           return
         else:
           #store and accept new goal
@@ -129,7 +129,7 @@ class GraspObjectServer:
         self.tf_listener.waitForTransform("base_link", object_pose.header.frame_id, object_pose.header.stamp, rospy.Duration(5))
         trans_pose = self.tf_listener.transformPose("base_link", object_pose)
         object_pose = trans_pose
-		#remove orientation -> pose is aligned with parent(base_link)
+	      #HACK remove orientation -> pose is aligned with parent(base_link)
         object_pose.pose.orientation.w = 1.0
         object_pose.pose.orientation.x = 0.0
         object_pose.pose.orientation.y = 0.0
@@ -155,16 +155,17 @@ class GraspObjectServer:
                            (obj_bbox_dims[0], obj_bbox_dims[1], obj_bbox_dims[2]))
         self.result.object_scene_name = "object_to_grasp"
         ########
-        self.update_feedback("execute grasps")
-        pug = self.createPickupGoal("object_to_grasp", grasp_list)
-        rospy.loginfo("Sending goal")
-        self.pickup_ac.send_goal(pug)
-        rospy.loginfo("Waiting for result")
-        self.pickup_ac.wait_for_result()
-        result = self.pickup_ac.get_result()
-        rospy.loginfo("Result is:")
-        print result
-        rospy.loginfo("Human readable error: " + str(moveit_error_dict[result.error_code.val]))
+        if self.current_goal.get_goal().execute_grasp:
+          self.update_feedback("execute grasps")
+          pug = self.createPickupGoal("object_to_grasp", grasp_list)
+          rospy.loginfo("Sending goal")
+          self.pickup_ac.send_goal(pug)
+          rospy.loginfo("Waiting for result")
+          self.pickup_ac.wait_for_result()
+          result = self.pickup_ac.get_result()
+          rospy.loginfo("Result is:")
+          print result
+          rospy.loginfo("Human readable error: " + str(moveit_error_dict[result.error_code.val]))
         ########
         self.update_feedback("finished")
         self.result.object_pose = object_pose
@@ -216,20 +217,21 @@ class GraspObjectServer:
           self.grasp_publisher.publish(grasp_PA)
           rospy.sleep(0.1)
           
-    def createPickupGoal(self, target, possible_grasps, group="right_arm_torso"):
+    def createPickupGoal(self, target, possible_grasps, group="right_arm_torso_grasping"):
           """ Create a PickupGoal with the provided data"""
           pug = PickupGoal()
           pug.target_name = target
           pug.group_name = group
           pug.possible_grasps.extend(possible_grasps)
-          pug.allowed_planning_time = 5.0 # Compare this to the... minute we had before!!
+          pug.allowed_planning_time = 5.0
           pug.planning_options.planning_scene_diff.is_diff = True
           pug.planning_options.planning_scene_diff.robot_state.is_diff = True
           pug.planning_options.plan_only = False
           pug.planning_options.replan = True
-          pug.planning_options.replan_attempts = 10  
+          pug.planning_options.replan_attempts = 10
+          pug.attached_object_touch_links = ['arm_right_5_link', "arm_right_grasping_frame"]
           pug.allowed_touch_objects.append(target)
-          pug.attached_object_touch_links.append("all")  
+          #pug.attached_object_touch_links.append('all')  
           return pug
 
 
