@@ -52,6 +52,12 @@ from moveit_commander import RobotCommander, PlanningSceneInterface
 from reem_tabletop_grasping.msg._GraspObjectResult import GraspObjectResult
 import geometry_msgs
 
+moveit_error_dict = {}
+for name in MoveItErrorCodes.__dict__.keys():
+    if not name[:1] == '_':
+        code = MoveItErrorCodes.__dict__[name]
+        moveit_error_dict[code] = name
+
 
 class GraspObjectServer:
 
@@ -123,6 +129,11 @@ class GraspObjectServer:
         self.tf_listener.waitForTransform("base_link", object_pose.header.frame_id, object_pose.header.stamp, rospy.Duration(5))
         trans_pose = self.tf_listener.transformPose("base_link", object_pose)
         object_pose = trans_pose
+		#remove orientation -> pose is aligned with parent(base_link)
+        object_pose.pose.orientation.w = 1.0
+        object_pose.pose.orientation.x = 0.0
+        object_pose.pose.orientation.y = 0.0
+        object_pose.pose.orientation.z = 0.0
         # shift object pose up by halfway, clustering code gives obj frame on the bottom because of too much noise on the table cropping (2 1pixel lines behind the objects)
         # TODO remove this hack, fix it in table filtering
         object_pose.pose.position.z += obj_bbox_dims[2]/2.0
@@ -145,6 +156,15 @@ class GraspObjectServer:
         self.result.object_scene_name = "object_to_grasp"
         ########
         self.update_feedback("execute grasps")
+        pug = self.createPickupGoal("object_to_grasp", grasp_list)
+        rospy.loginfo("Sending goal")
+        self.pickup_ac.send_goal(pug)
+        rospy.loginfo("Waiting for result")
+        self.pickup_ac.wait_for_result()
+        result = self.pickup_ac.get_result()
+        rospy.loginfo("Result is:")
+        print result
+        rospy.loginfo("Human readable error: " + str(moveit_error_dict[result.error_code.val]))
         ########
         self.update_feedback("finished")
         self.result.object_pose = object_pose
@@ -195,6 +215,22 @@ class GraspObjectServer:
               grasp_PA.poses.append(p)
           self.grasp_publisher.publish(grasp_PA)
           rospy.sleep(0.1)
+          
+    def createPickupGoal(self, target, possible_grasps, group="right_arm_torso"):
+          """ Create a PickupGoal with the provided data"""
+          pug = PickupGoal()
+          pug.target_name = target
+          pug.group_name = group
+          pug.possible_grasps.extend(possible_grasps)
+          pug.allowed_planning_time = 5.0 # Compare this to the... minute we had before!!
+          pug.planning_options.planning_scene_diff.is_diff = True
+          pug.planning_options.planning_scene_diff.robot_state.is_diff = True
+          pug.planning_options.plan_only = False
+          pug.planning_options.replan = True
+          pug.planning_options.replan_attempts = 10  
+          pug.allowed_touch_objects.append(target)
+          pug.attached_object_touch_links.append("all")  
+          return pug
 
 
 if __name__ == '__main__':
