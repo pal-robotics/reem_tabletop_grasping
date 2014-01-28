@@ -1,0 +1,18 @@
+#Index of the object to be grasped
+int32 target_id
+#Flat whether to execute grasp with MoveIt pick or not
+bool execute_grasp
+---
+#Name of desired object in the planning scene
+string object_scene_name
+#Pose of the desired object
+geometry_msgs/PoseStamped object_pose
+#Bounding box
+geometry_msgs/Point bounding_box
+#Generated grasps
+moveit_msgs/Grasp[] grasps
+---
+#Last state of the actionserver execution
+string last_state
+#Generated grasps
+moveit_msgs/Grasp[] grasps
