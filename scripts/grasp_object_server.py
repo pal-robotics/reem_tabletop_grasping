@@ -217,7 +217,7 @@ class GraspObjectServer:
           self.grasp_publisher.publish(grasp_PA)
           rospy.sleep(0.1)
           
-    def createPickupGoal(self, target, possible_grasps, group="right_arm_torso_grasping"):
+    def createPickupGoal(self, target, possible_grasps, group="right_arm_torso"):
           """ Create a PickupGoal with the provided data"""
           pug = PickupGoal()
           pug.target_name = target
