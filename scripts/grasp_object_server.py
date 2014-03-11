@@ -229,7 +229,7 @@ class GraspObjectServer:
           pug.planning_options.plan_only = False
           pug.planning_options.replan = True
           pug.planning_options.replan_attempts = 10
-          pug.attached_object_touch_links = ['arm_right_5_link', "arm_right_grasping_frame"]
+          pug.attached_object_touch_links = ['arm_right_5_link', "hand_right_grasping_frame"]
           pug.allowed_touch_objects.append(target)
           #pug.attached_object_touch_links.append('all')  
           return pug
