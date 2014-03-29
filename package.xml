@@ -32,4 +32,5 @@
   <run_depend>tf</run_depend>
   <run_depend>trajectory_msgs</run_depend>
   <run_depend>message_runtime</run_depend>
+  <run_depend>python-scipy</run_depend>
 </package>
