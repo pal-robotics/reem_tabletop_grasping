@@ -95,87 +95,87 @@ class GraspObjectServer:
         
     def goal_callback(self, goal):      
         if self.current_goal:
-          goal.set_rejected() # "Server busy"
-          return
+            goal.set_rejected() # "Server busy"
+            return
         elif len(self.last_objects.objects) - 1 < goal.get_goal().target_id:
-          goal.set_rejected() # "No objects to grasp were received on the objects topic."
-          return
+            goal.set_rejected() # "No objects to grasp were received on the objects topic."
+            return
         else:
-          #store and accept new goal
-          self.current_goal = goal
-          self.current_goal.set_accepted()
-          #run grasping state machine
-          self.grasping_sm()
-          #finished, get rid of goal
-          self.current_goal = None
+            #store and accept new goal
+            self.current_goal = goal
+            self.current_goal.set_accepted()
+            #run grasping state machine
+            self.grasping_sm()
+            #finished, get rid of goal
+            self.current_goal = None
         
     def cancel_callback(self, goal):
         #TODO stop motions?
         self.current_goal.set_canceled()
 
     def grasping_sm(self):
-      if self.current_goal:
-        self.update_feedback("running clustering")
-        (object_points, obj_bbox_dims, 
-         object_bounding_box, object_pose) = self.cbbf.find_object_frame_and_bounding_box(self.last_objects.objects[self.current_goal.get_goal().target_id].point_clouds[0])
-        #TODO visualize bbox
-        #TODO publish filtered pointcloud?
-        print obj_bbox_dims
-        ########
-        self.update_feedback("check reachability")
-        ########
-        self.update_feedback("generate grasps")
-        #transform pose to base_link
-        self.tf_listener.waitForTransform("base_link", object_pose.header.frame_id, object_pose.header.stamp, rospy.Duration(5))
-        trans_pose = self.tf_listener.transformPose("base_link", object_pose)
-        object_pose = trans_pose
-	      #HACK remove orientation -> pose is aligned with parent(base_link)
-        object_pose.pose.orientation.w = 1.0
-        object_pose.pose.orientation.x = 0.0
-        object_pose.pose.orientation.y = 0.0
-        object_pose.pose.orientation.z = 0.0
-        # shift object pose up by halfway, clustering code gives obj frame on the bottom because of too much noise on the table cropping (2 1pixel lines behind the objects)
-        # TODO remove this hack, fix it in table filtering
-        object_pose.pose.position.z += obj_bbox_dims[2]/2.0
-        grasp_list = self.generate_grasps(object_pose, obj_bbox_dims[0]) # width is the bbox size on x
-        # check if there are grasps, if not, abort
-        if len(grasp_list) == 0:
-          self.update_aborted("no grasps received")
-          return
-        self.publish_grasps_as_poses(grasp_list)
-        self.feedback.grasps = grasp_list
-        self.current_goal.publish_feedback(self.feedback)
-        self.result.grasps = grasp_list
-        ########
-        self.update_feedback("setup planning scene")
-        #remove old objects
-        self.scene.remove_world_object("object_to_grasp")
-        # add object to grasp to planning scene      
-        self.scene.add_box("object_to_grasp", object_pose, 
-                           (obj_bbox_dims[0], obj_bbox_dims[1], obj_bbox_dims[2]))
-        self.result.object_scene_name = "object_to_grasp"
-        ########
-        if self.current_goal.get_goal().execute_grasp:
-          self.update_feedback("execute grasps")
-          pug = self.createPickupGoal("object_to_grasp", grasp_list)
-          rospy.loginfo("Sending goal")
-          self.pickup_ac.send_goal(pug)
-          rospy.loginfo("Waiting for result")
-          self.pickup_ac.wait_for_result()
-          result = self.pickup_ac.get_result()
-          rospy.loginfo("Result is:")
-          print result
-          rospy.loginfo("Human readable error: " + str(moveit_error_dict[result.error_code.val]))
-        ########
-        self.update_feedback("finished")
-        self.result.object_pose = object_pose
-        #bounding box in a point message
-        self.result.bounding_box = Point()
-        self.result.bounding_box.x = obj_bbox_dims[0]
-        self.result.bounding_box.y = obj_bbox_dims[1]
-        self.result.bounding_box.z = obj_bbox_dims[2]
-        self.current_goal.set_succeeded(result = self.result)
-        #self.current_goal.set_aborted()
+        if self.current_goal:
+            self.update_feedback("running clustering")
+            (object_points, obj_bbox_dims, 
+             object_bounding_box, object_pose) = self.cbbf.find_object_frame_and_bounding_box(self.last_objects.objects[self.current_goal.get_goal().target_id].point_clouds[0])
+            #TODO visualize bbox
+            #TODO publish filtered pointcloud?
+            print obj_bbox_dims
+            ########
+            self.update_feedback("check reachability")
+            ########
+            self.update_feedback("generate grasps")
+            #transform pose to base_link
+            self.tf_listener.waitForTransform("base_link", object_pose.header.frame_id, object_pose.header.stamp, rospy.Duration(5))
+            trans_pose = self.tf_listener.transformPose("base_link", object_pose)
+            object_pose = trans_pose
+            #HACK remove orientation -> pose is aligned with parent(base_link)
+            object_pose.pose.orientation.w = 1.0
+            object_pose.pose.orientation.x = 0.0
+            object_pose.pose.orientation.y = 0.0
+            object_pose.pose.orientation.z = 0.0
+            # shift object pose up by halfway, clustering code gives obj frame on the bottom because of too much noise on the table cropping (2 1pixel lines behind the objects)
+            # TODO remove this hack, fix it in table filtering
+            object_pose.pose.position.z += obj_bbox_dims[2]/2.0
+            grasp_list = self.generate_grasps(object_pose, obj_bbox_dims[0]) # width is the bbox size on x
+            # check if there are grasps, if not, abort
+            if len(grasp_list) == 0:
+                self.update_aborted("no grasps received")
+                return
+            self.publish_grasps_as_poses(grasp_list)
+            self.feedback.grasps = grasp_list
+            self.current_goal.publish_feedback(self.feedback)
+            self.result.grasps = grasp_list
+            ########
+            self.update_feedback("setup planning scene")
+            #remove old objects
+            self.scene.remove_world_object("object_to_grasp")
+            # add object to grasp to planning scene      
+            self.scene.add_box("object_to_grasp", object_pose, 
+                               (obj_bbox_dims[0], obj_bbox_dims[1], obj_bbox_dims[2]))
+            self.result.object_scene_name = "object_to_grasp"
+            ########
+            if self.current_goal.get_goal().execute_grasp:
+                self.update_feedback("execute grasps")
+                pug = self.createPickupGoal("object_to_grasp", grasp_list)
+                rospy.loginfo("Sending goal")
+                self.pickup_ac.send_goal(pug)
+                rospy.loginfo("Waiting for result")
+                self.pickup_ac.wait_for_result()
+                result = self.pickup_ac.get_result()
+                rospy.loginfo("Result is:")
+                print result
+                rospy.loginfo("Human readable error: " + str(moveit_error_dict[result.error_code.val]))
+            ########
+            self.update_feedback("finished")
+            self.result.object_pose = object_pose
+            #bounding box in a point message
+            self.result.bounding_box = Point()
+            self.result.bounding_box.x = obj_bbox_dims[0]
+            self.result.bounding_box.y = obj_bbox_dims[1]
+            self.result.bounding_box.z = obj_bbox_dims[2]
+            self.current_goal.set_succeeded(result = self.result)
+            #self.current_goal.set_aborted()
         
     def update_feedback(self, text):
         self.feedback.last_state = text
@@ -186,53 +186,53 @@ class GraspObjectServer:
         self.current_goal.set_aborted()
         
     def generate_grasps(self, pose, width):
-          #send request to block grasp generator service
-          if not self.grasps_ac.wait_for_server(rospy.Duration(3.0)):
+        #send request to block grasp generator service
+        if not self.grasps_ac.wait_for_server(rospy.Duration(3.0)):
             return []
-          rospy.loginfo("Successfully connected.")
-          goal = GenerateBlockGraspsGoal()
-          goal.pose = pose.pose
-          goal.width = width
-          self.grasps_ac.send_goal(goal)
-          rospy.loginfo("Sent goal, waiting:\n" + str(goal))
-          t_start = rospy.Time.now()
-          self.grasps_ac.wait_for_result()
-          t_end = rospy.Time.now()
-          t_total = t_end - t_start
-          rospy.loginfo("Result received in " + str(t_total.to_sec()))
-          grasp_list = self.grasps_ac.get_result().grasps
-          return grasp_list
+        rospy.loginfo("Successfully connected.")
+        goal = GenerateBlockGraspsGoal()
+        goal.pose = pose.pose
+        goal.width = width
+        self.grasps_ac.send_goal(goal)
+        rospy.loginfo("Sent goal, waiting:\n" + str(goal))
+        t_start = rospy.Time.now()
+        self.grasps_ac.wait_for_result()
+        t_end = rospy.Time.now()
+        t_total = t_end - t_start
+        rospy.loginfo("Result received in " + str(t_total.to_sec()))
+        grasp_list = self.grasps_ac.get_result().grasps
+        return grasp_list
 
     def publish_grasps_as_poses(self, grasps):
-          rospy.loginfo("Publishing PoseArray on /grasp_pose_from_block_bla for grasp_pose")
-          graspmsg = Grasp()
-          grasp_PA = PoseArray()
-          header = Header()
-          header.frame_id = "base_link"
-          header.stamp = rospy.Time.now()
-          grasp_PA.header = header
-          for graspmsg in grasps:
-              p = Pose(graspmsg.grasp_pose.pose.position, graspmsg.grasp_pose.pose.orientation)
-              grasp_PA.poses.append(p)
-          self.grasp_publisher.publish(grasp_PA)
-          rospy.sleep(0.1)
+        rospy.loginfo("Publishing PoseArray on /grasp_pose_from_block_bla for grasp_pose")
+        graspmsg = Grasp()
+        grasp_PA = PoseArray()
+        header = Header()
+        header.frame_id = "base_link"
+        header.stamp = rospy.Time.now()
+        grasp_PA.header = header
+        for graspmsg in grasps:
+            p = Pose(graspmsg.grasp_pose.pose.position, graspmsg.grasp_pose.pose.orientation)
+            grasp_PA.poses.append(p)
+        self.grasp_publisher.publish(grasp_PA)
+        rospy.sleep(0.1)
           
     def createPickupGoal(self, target, possible_grasps, group="right_arm_torso"):
-          """ Create a PickupGoal with the provided data"""
-          pug = PickupGoal()
-          pug.target_name = target
-          pug.group_name = group
-          pug.possible_grasps.extend(possible_grasps)
-          pug.allowed_planning_time = 5.0
-          pug.planning_options.planning_scene_diff.is_diff = True
-          pug.planning_options.planning_scene_diff.robot_state.is_diff = True
-          pug.planning_options.plan_only = False
-          pug.planning_options.replan = True
-          pug.planning_options.replan_attempts = 10
-          pug.attached_object_touch_links = ['arm_right_5_link', "hand_right_grasping_frame"]
-          pug.allowed_touch_objects.append(target)
-          #pug.attached_object_touch_links.append('all')  
-          return pug
+        """ Create a PickupGoal with the provided data"""
+        pug = PickupGoal()
+        pug.target_name = target
+        pug.group_name = group
+        pug.possible_grasps.extend(possible_grasps)
+        pug.allowed_planning_time = 5.0
+        pug.planning_options.planning_scene_diff.is_diff = True
+        pug.planning_options.planning_scene_diff.robot_state.is_diff = True
+        pug.planning_options.plan_only = False
+        pug.planning_options.replan = True
+        pug.planning_options.replan_attempts = 10
+        pug.attached_object_touch_links = ['arm_right_5_link', "hand_right_grasping_frame"]
+        pug.allowed_touch_objects.append(target)
+        #pug.attached_object_touch_links.append('all')  
+        return pug
 
 
 if __name__ == '__main__':
