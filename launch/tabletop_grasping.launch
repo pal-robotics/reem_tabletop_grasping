@@ -7,4 +7,6 @@
   <node name="grasp_generator_server" pkg="block_grasp_generator" type="block_grasp_generator_server"/>
   <!-- -->
   <node name="grasp_object_server" pkg="reem_tabletop_grasping" type="grasp_object_server.py"/>
+  
+  <node name="depth_throtle_server" pkg="reem_tabletop_grasping" type="depth_throtle_server.py"/>
 </launch>
