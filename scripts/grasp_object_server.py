@@ -88,6 +88,11 @@ class GraspObjectServer:
         self.result = GraspObjectResult()
         self.current_goal = None
         self.grasp_obj_as.start()
+        
+        # Take care of left and right arm grasped stuff
+        self.right_hand_object = None
+        self.left_hand_object = None
+        
 
     def objects_callback(self, data):
         rospy.loginfo(rospy.get_name() + ": This message contains %d objects." % len(data.objects))
@@ -163,8 +168,8 @@ class GraspObjectServer:
                 rospy.loginfo("Waiting for result")
                 self.pickup_ac.wait_for_result()
                 result = self.pickup_ac.get_result()
-                rospy.loginfo("Result is:")
-                print result
+                #rospy.loginfo("Result is:")
+                #print result
                 rospy.loginfo("Human readable error: " + str(moveit_error_dict[result.error_code.val]))
             ########
             self.update_feedback("finished")
@@ -187,7 +192,7 @@ class GraspObjectServer:
         
     def generate_grasps(self, pose, width):
         #send request to block grasp generator service
-        if not self.grasps_ac.wait_for_server(rospy.Duration(3.0)):
+        if not self.grasps_ac.wait_for_server(rospy.Duration(5.0)):
             return []
         rospy.loginfo("Successfully connected.")
         goal = GenerateBlockGraspsGoal()
@@ -229,7 +234,7 @@ class GraspObjectServer:
         pug.planning_options.plan_only = False
         pug.planning_options.replan = True
         pug.planning_options.replan_attempts = 10
-        pug.attached_object_touch_links = ['arm_right_5_link', "hand_right_grasping_frame"]
+        #pug.attached_object_touch_links = ['arm_right_5_link', "hand_right_grasping_frame"]
         pug.allowed_touch_objects.append(target)
         #pug.attached_object_touch_links.append('all')  
         return pug
