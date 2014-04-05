@@ -2,6 +2,8 @@
 int32 target_id
 #Flat whether to execute grasp with MoveIt pick or not
 bool execute_grasp
+#Pose of object that we want to grasp, its cluster will be searched and grasped
+geometry_msgs/PoseStamped pose_of_cluster
 ---
 #Name of desired object in the planning scene
 string object_scene_name

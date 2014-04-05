@@ -10,7 +10,6 @@ find_package(catkin REQUIRED COMPONENTS
 add_action_files(
   FILES
   GraspObject.action
-  GraspCluster.action
 )
 
 generate_messages(
