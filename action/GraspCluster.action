@@ -1,5 +1,5 @@
 #Pose of the cluster we want to grasp
-PoseStamped pose_of_cluster
+geometry_msgs/PoseStamped pose_of_cluster
 ---
 #Name of desired object in the planning scene
 string object_scene_name
