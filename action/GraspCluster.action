@@ -1,8 +1,0 @@
-#Pose of the cluster we want to grasp
-geometry_msgs/PoseStamped pose_of_cluster
----
-#Name of desired object in the planning scene
-string object_scene_name
----
-#Last state of the actionserver execution
-string last_state
