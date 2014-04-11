@@ -152,7 +152,7 @@ class GraspObjectServer:
             self.update_feedback("Searching closer cluster while clustering")
             (closest_cluster_id, (object_points, obj_bbox_dims, object_bounding_box, object_pose)) = self.get_id_of_closest_cluster_to_pose(object_to_grasp_pose) 
             
-            rospy.logwarn("in AS: Closest cluster id is: " + str(closest_cluster_id))
+            rospy.logdebug("in AS: Closest cluster id is: " + str(closest_cluster_id))
             #TODO visualize bbox
             #TODO publish filtered pointcloud?
             rospy.loginfo("BBOX: " + str(obj_bbox_dims))
@@ -160,7 +160,7 @@ class GraspObjectServer:
             self.update_feedback("check reachability")
             ########
             self.update_feedback("generate grasps")
-            rospy.logwarn("Object pose before tf thing is: " + str(object_pose))
+            rospy.logdebug("Object pose before tf thing is: " + str(object_pose))
             #transform pose to base_link, IS THIS NECESSARY?? should be a function in any case
             self.tf_listener.waitForTransform("base_link", object_pose.header.frame_id, object_pose.header.stamp, rospy.Duration(15))
             trans_pose = self.tf_listener.transformPose("base_link", object_pose)
