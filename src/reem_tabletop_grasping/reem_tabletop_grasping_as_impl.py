@@ -42,9 +42,7 @@ from geometry_msgs.msg import PoseArray, Pose, Point, PoseStamped
 from std_msgs.msg import Header
 from std_srvs.srv import Empty, EmptyRequest
 # own imports
-from reem_tabletop_grasping.msg import GraspObjectAction
-from reem_tabletop_grasping.msg import GraspObjectFeedback
-from reem_tabletop_grasping.msg import ObjectManipulationAction
+from reem_tabletop_grasping.msg import ObjectManipulationAction, ObjectManipulationFeedback, ObjectManipulationActionResult
 
 # perception imports & grasp planning imports
 from object_recognition_msgs.msg import RecognizedObjectArray
@@ -53,7 +51,6 @@ from block_grasp_generator.msg import GenerateBlockGraspsAction, GenerateBlockGr
 # manipulation imports
 from moveit_msgs.msg import PickupAction, PlaceAction
 from moveit_commander import PlanningSceneInterface
-from reem_tabletop_grasping.msg._GraspObjectResult import GraspObjectResult
 
 from helper_functions import createPickupGoal, dist_between_poses, createPlaceGoal, moveit_error_dict
 
@@ -110,9 +107,9 @@ class ObjectManipulationAS:
 
         # blocking action server
         rospy.loginfo("Creating Action Server '" + name + "'...")
-        self.grasp_obj_as = ActionServer(name, GraspObjectAction, self.goal_callback, self.cancel_callback, False)
-        self.feedback = GraspObjectFeedback()
-        self.result = GraspObjectResult()
+        self.grasp_obj_as = ActionServer(name, ObjectManipulationAction, self.goal_callback, self.cancel_callback, False)
+        self.feedback = ObjectManipulationFeedback()
+        self.result = ObjectManipulationActionResult()
         self.current_goal = None
 
         # Take care of left and right arm grasped stuff
