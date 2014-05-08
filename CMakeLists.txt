@@ -7,6 +7,8 @@ find_package(catkin REQUIRED COMPONENTS
   object_recognition_msgs rospy std_msgs tf trajectory_msgs
 )
 
+catkin_python_setup()
+
 add_action_files(
   DIRECTORY action
   FILES GraspObject.action
