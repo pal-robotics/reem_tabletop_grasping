@@ -26,3 +26,6 @@ catkin_package(
                 object_recognition_clusters object_recognition_msgs 
                 rospy std_msgs tf trajectory_msgs
 )
+
+install (PROGRAMS scripts/reem_object_manipulation_as.py
+  DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION})
