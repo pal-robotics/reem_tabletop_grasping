@@ -44,6 +44,8 @@ from std_srvs.srv import Empty, EmptyRequest
 # own imports
 from reem_tabletop_grasping.msg import GraspObjectAction
 from reem_tabletop_grasping.msg import GraspObjectFeedback
+from reem_tabletop_grasping.msg import ObjectManipulationAction
+
 # perception imports & grasp planning imports
 from object_recognition_msgs.msg import RecognizedObjectArray
 from object_recognition_clusters import ClusterBoundingBoxFinder
@@ -52,6 +54,7 @@ from block_grasp_generator.msg import GenerateBlockGraspsAction, GenerateBlockGr
 from moveit_msgs.msg import PickupAction, PlaceAction
 from moveit_commander import PlanningSceneInterface
 from reem_tabletop_grasping.msg._GraspObjectResult import GraspObjectResult
+
 from helper_functions import createPickupGoal, dist_between_poses, createPlaceGoal, moveit_error_dict
 
 # TODO: dynamic param to setup debug info
@@ -66,8 +69,10 @@ PLACE_AS = '/place'
 GRASP_GENERATOR_AS = '/grasp_generator_server/generate'
 DEPTH_THROTLE_SRV = '/depth_throtle'
 
+OBJECT_MANIPULATION_AS = 'object_manipulation_server'
 
-class GraspObjectServer:
+
+class ObjectManipulationAS:
 
     def __init__(self, name):
         # stuff for grasp planning
@@ -307,11 +312,3 @@ class GraspObjectServer:
             return False
         else:
             return True
-
-
-if __name__ == '__main__':
-    name = 'grasp_object_server'
-    rospy.init_node(name, anonymous=False)
-    server = GraspObjectServer(name)
-    rospy.loginfo(name + ": Ready to roll.")
-    rospy.spin()
