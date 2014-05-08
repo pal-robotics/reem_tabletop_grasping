@@ -78,24 +78,25 @@ class GraspObjectServer:
         rospy.loginfo("Initializing a ClusterBoundingBoxFinder...")
         self.cbbf = ClusterBoundingBoxFinder(self.tf_listener, self.tf_broadcaster, "base_link")
         self.last_clusters = None
+        rospy.loginfo("Subscribing to '" + RECOGNIZED_OBJECT_ARRAY_TOPIC + "'...")
         self.sub = rospy.Subscriber(RECOGNIZED_OBJECT_ARRAY_TOPIC, RecognizedObjectArray, self.objects_callback)
 
         if DEBUG_MODE:
             self.to_grasp_object_pose_pub = rospy.Publisher(TO_BE_GRASPED_OBJECT_POSE_TOPIC, PoseStamped)
 
-        rospy.loginfo("Connecting to pickup AS...")
+        rospy.loginfo("Connecting to pickup AS '" + PICKUP_AS + "'...")
         self.pickup_ac = SimpleActionClient(PICKUP_AS, PickupAction)
         self.pickup_ac.wait_for_server()
 
-        rospy.loginfo("Connecting to place AS...")
+        rospy.loginfo("Connecting to place AS '" + PLACE_AS + "'...")
         self.place_ac = SimpleActionClient(PLACE_AS, PlaceAction)
         self.place_ac.wait_for_server()
 
-        rospy.loginfo("Connecting to grasp generator AS...")
+        rospy.loginfo("Connecting to grasp generator AS '" + GRASP_GENERATOR_AS + "'...")
         self.grasps_ac = SimpleActionClient(GRASP_GENERATOR_AS, GenerateBlockGraspsAction)
         self.grasps_ac.wait_for_server()
 
-        rospy.loginfo("Connecting to depth throttle server...")
+        rospy.loginfo("Connecting to depth throttle server '" + DEPTH_THROTLE_SRV + "'...")
         self.depth_service = rospy.ServiceProxy(DEPTH_THROTLE_SRV, Empty)
         self.depth_service.wait_for_service()
 
@@ -103,17 +104,18 @@ class GraspObjectServer:
         self.scene = PlanningSceneInterface()
 
         # blocking action server
-        rospy.loginfo("Creating Action Server...")
+        rospy.loginfo("Creating Action Server '" + name + "'...")
         self.grasp_obj_as = ActionServer(name, GraspObjectAction, self.goal_callback, self.cancel_callback, False)
         self.feedback = GraspObjectFeedback()
         self.result = GraspObjectResult()
         self.current_goal = None
-        rospy.loginfo("Starting Action Server...")
-        self.grasp_obj_as.start()
 
         # Take care of left and right arm grasped stuff
         self.right_hand_object = None
         self.left_hand_object = None
+
+        rospy.loginfo("Starting Action Server!")
+        self.grasp_obj_as.start()
 
     def objects_callback(self, data):
         rospy.loginfo(rospy.get_name() + ": This message contains %d objects." % len(data.objects))
