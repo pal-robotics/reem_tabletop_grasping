@@ -32,35 +32,39 @@
 # POSSIBILITY OF SUCH DAMAGE.
 #
 # author: Bence Magyar
+# author: Sammy Pfeiffer
 
-#ros imports
+# ROS imports
 import rospy
 import tf
 from actionlib import ActionServer, SimpleActionClient
 from geometry_msgs.msg import PoseArray, Pose, Point, PoseStamped
 from std_msgs.msg import Header
 from std_srvs.srv import Empty, EmptyRequest
-#own imports
+# own imports
 from reem_tabletop_grasping.msg import GraspObjectAction
 from reem_tabletop_grasping.msg import GraspObjectFeedback
-#perception imports & grasp planning imports
+# perception imports & grasp planning imports
 from object_recognition_msgs.msg import RecognizedObjectArray
 from object_recognition_clusters import ClusterBoundingBoxFinder
 from block_grasp_generator.msg import GenerateBlockGraspsAction, GenerateBlockGraspsGoal
-#manipulation imports
-from moveit_msgs.msg import Grasp, PickupAction, PickupGoal, PickupResult, GripperTranslation, MoveItErrorCodes
-from moveit_commander import RobotCommander, PlanningSceneInterface
+# manipulation imports
+from moveit_msgs.msg import PickupAction, PlaceAction
+from moveit_commander import PlanningSceneInterface
 from reem_tabletop_grasping.msg._GraspObjectResult import GraspObjectResult
-import geometry_msgs
-#other imports
-import copy
-import numpy as np
+from helper_functions import createPickupGoal, dist_between_poses, createPlaceGoal, moveit_error_dict
 
-moveit_error_dict = {}
-for name in MoveItErrorCodes.__dict__.keys():
-    if not name[:1] == '_':
-        code = MoveItErrorCodes.__dict__[name]
-        moveit_error_dict[code] = name
+# TODO: dynamic param to setup debug info
+DEBUG_MODE = True
+if DEBUG_MODE:
+    from visualizing_functions import publish_grasps_as_poses
+
+RECOGNIZED_OBJECT_ARRAY_TOPIC = '/recognized_object_array'
+TO_BE_GRASPED_OBJECT_POSE_TOPIC = '/to_grasp_object_pose'
+PICKUP_AS = '/pickup'
+PLACE_AS = '/place'
+GRASP_GENERATOR_AS = '/grasp_generator_server/generate'
+DEPTH_THROTLE_SRV = '/depth_throtle'
 
 
 class GraspObjectServer:
@@ -74,31 +78,37 @@ class GraspObjectServer:
         rospy.loginfo("Initializing a ClusterBoundingBoxFinder...")
         self.cbbf = ClusterBoundingBoxFinder(self.tf_listener, self.tf_broadcaster, "base_link")
         self.last_clusters = None
-        self.sub = rospy.Subscriber("/recognized_object_array", RecognizedObjectArray, self.objects_callback)
-        self.grasp_publisher = rospy.Publisher("generated_grasps", PoseArray)
+        self.sub = rospy.Subscriber(RECOGNIZED_OBJECT_ARRAY_TOPIC, RecognizedObjectArray, self.objects_callback)
 
-        self.to_grasp_object_pose_pub = rospy.Publisher("/to_grasp_object_pose", PoseStamped)
+        if DEBUG_MODE:
+            self.to_grasp_object_pose_pub = rospy.Publisher(TO_BE_GRASPED_OBJECT_POSE_TOPIC, PoseStamped)
 
-        rospy.loginfo("Connecting to pickup AS")
-        self.pickup_ac = SimpleActionClient('/pickup', PickupAction)
+        rospy.loginfo("Connecting to pickup AS...")
+        self.pickup_ac = SimpleActionClient(PICKUP_AS, PickupAction)
         self.pickup_ac.wait_for_server()
 
-        rospy.loginfo("Connecting to grasp generator AS")
-        self.grasps_ac = SimpleActionClient('/grasp_generator_server/generate', GenerateBlockGraspsAction)
+        rospy.loginfo("Connecting to place AS...")
+        self.place_ac = SimpleActionClient(PLACE_AS, PlaceAction)
+        self.place_ac.wait_for_server()
+
+        rospy.loginfo("Connecting to grasp generator AS...")
+        self.grasps_ac = SimpleActionClient(GRASP_GENERATOR_AS, GenerateBlockGraspsAction)
         self.grasps_ac.wait_for_server()
 
         rospy.loginfo("Connecting to depth throttle server...")
-        self.depth_service = rospy.ServiceProxy('/depth_throtle', Empty)
+        self.depth_service = rospy.ServiceProxy(DEPTH_THROTLE_SRV, Empty)
         self.depth_service.wait_for_service()
 
-        #planning scene for motion planning
+        rospy.loginfo("Getting a PlanningSceneInterface instance...")
         self.scene = PlanningSceneInterface()
 
         # blocking action server
+        rospy.loginfo("Creating Action Server...")
         self.grasp_obj_as = ActionServer(name, GraspObjectAction, self.goal_callback, self.cancel_callback, False)
         self.feedback = GraspObjectFeedback()
         self.result = GraspObjectResult()
         self.current_goal = None
+        rospy.loginfo("Starting Action Server...")
         self.grasp_obj_as.start()
 
         # Take care of left and right arm grasped stuff
@@ -134,7 +144,8 @@ class GraspObjectServer:
         if self.current_goal:
             goal_message_field = self.current_goal.get_goal()
             # Publish pose of goal position
-            self.to_grasp_object_pose_pub.publish(goal_message_field.pose_of_cluster)
+            if DEBUG_MODE:
+                self.to_grasp_object_pose_pub.publish(goal_message_field.pose_of_cluster)
             self.update_feedback("Detecting clusters")
             if not self.wait_for_recognized_array(wait_time=5, timeout_time=10):  # wait until we get clusters published
                 self.update_aborted("Failed detecting clusters")
@@ -176,7 +187,8 @@ class GraspObjectServer:
             if len(grasp_list) == 0:
                 self.update_aborted("no grasps received")
                 return
-            self.publish_grasps_as_poses(grasp_list)
+            if DEBUG_MODE:  # TODO: change to dynamic param
+                publish_grasps_as_poses(grasp_list)
             self.feedback.grasps = grasp_list
             self.current_goal.publish_feedback(self.feedback)
             self.result.grasps = grasp_list
@@ -191,7 +203,7 @@ class GraspObjectServer:
             ########
             if self.current_goal.get_goal().execute_grasp:
                 self.update_feedback("execute grasps")
-                pug = self.createPickupGoal("object_to_grasp", grasp_list)
+                pug = createPickupGoal("object_to_grasp", grasp_list)
                 rospy.loginfo("Sending goal")
                 self.pickup_ac.send_goal(pug)
                 rospy.loginfo("Waiting for result")
@@ -237,55 +249,8 @@ class GraspObjectServer:
         grasp_list = self.grasps_ac.get_result().grasps
         return grasp_list
 
-    def publish_grasps_as_poses(self, grasps):
-        rospy.loginfo("Publishing PoseArray on /grasp_pose_from_block_bla for grasp_pose")
-        graspmsg = Grasp()
-        grasp_PA = PoseArray()
-        header = Header()
-        header.frame_id = "base_link"
-        header.stamp = rospy.Time.now()
-        grasp_PA.header = header
-        for graspmsg in grasps:
-            p = Pose(graspmsg.grasp_pose.pose.position, graspmsg.grasp_pose.pose.orientation)
-            grasp_PA.poses.append(p)
-        self.grasp_publisher.publish(grasp_PA)
-        rospy.sleep(0.1)
-
-    def createPickupGoal(self, target, possible_grasps, group="right_arm_torso"):
-        """ Create a PickupGoal with the provided data"""
-        pug = PickupGoal()
-        pug.target_name = target
-        pug.group_name = group
-        pug.possible_grasps.extend(possible_grasps)
-        pug.allowed_planning_time = 5.0
-        pug.planning_options.planning_scene_diff.is_diff = True
-        pug.planning_options.planning_scene_diff.robot_state.is_diff = True
-        pug.planning_options.plan_only = False
-        pug.planning_options.replan = True
-        pug.planning_options.replan_attempts = 10
-        #pug.attached_object_touch_links = ['arm_right_5_link', "hand_right_grasping_frame"]
-        #pug.allowed_touch_objects.append(target)
-        #pug.attached_object_touch_links.append('all')
-        return pug
-
-    def dist_between_poses(self, pose1, pose2):
-        """Calculates the distance between two points in euclidean space using numpy
-        poses can be Pose or PoseStamped"""
-        if type(pose1) == type(Pose()):
-            p1 = np.array(pose1.position.__getstate__())
-        elif type(pose1) == type(PoseStamped()):
-            p1 = np.array(pose1.pose.position.__getstate__())
-
-        if type(pose2) == type(Pose()):
-            p2 = np.array(pose2.position.__getstate__())
-        elif type(pose2) == type(PoseStamped()):
-            p2 = np.array(pose2.pose.position.__getstate__())
-
-        dist = np.linalg.norm(p1-p2, ord=3)
-        return dist
-
     def get_id_of_closest_cluster_to_pose(self, input_pose):
-        """Returns the id of the closest cluster to the pose provided (in Pose or PoseStamped) 
+        """Returns the id of the closest cluster to the pose provided (in Pose or PoseStamped)
         and all the associated clustering information"""
         current_id = 0
         closest_pose = None
@@ -305,11 +270,11 @@ class GraspObjectServer:
                 closest_pose = object_pose
                 closest_bbox = object_bounding_box
                 closest_bbox_dims = obj_bbox_dims
-                closest_distance = self.dist_between_poses(closest_pose, input_pose)
+                closest_distance = dist_between_poses(closest_pose, input_pose)
             else:
-                if self.dist_between_poses(object_pose, input_pose) < closest_distance:
+                if dist_between_poses(object_pose, input_pose) < closest_distance:
                     closest_object_points = object_points
-                    closest_distance = self.dist_between_poses(object_pose, input_pose)
+                    closest_distance = dist_between_poses(object_pose, input_pose)
                     closest_pose = object_pose
                     closest_bbox = object_bounding_box
                     closest_bbox_dims = obj_bbox_dims
