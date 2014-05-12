@@ -40,6 +40,7 @@ import rospy
 # Messages
 from geometry_msgs.msg import Pose, PoseStamped, PoseArray, Vector3Stamped, Vector3, Quaternion, Point
 from trajectory_msgs.msg import JointTrajectoryPoint, JointTrajectory
+from std_msgs.msg import Header
 from moveit_msgs.msg import GripperTranslation, MoveItErrorCodes
 from moveit_msgs.msg import PickupGoal, PlaceAction, PlaceGoal, PlaceResult, PlaceLocation
 # System stuff
@@ -54,12 +55,15 @@ for name in MoveItErrorCodes.__dict__.keys():
         moveit_error_dict[code] = name
 
 
-def createPlaceGoal(place_pose, group="right_arm_torso", target="part"):
-    """ Create PlaceGoal with the provided data"""
+def createPlaceGoal(place_pose, group="right_arm_torso", target="_undefined_target_"):
+    """Create PlaceGoal with the provided data"""
     placeg = PlaceGoal()
     placeg.group_name = group
     placeg.attached_object_name = target
-    placeg.place_locations = createPlaceLocations(place_pose)
+    if type(place_pose) == type(PoseStamped()):
+        placeg.place_locations = createPlaceLocations(place_pose)
+    elif type(place_pose) == type(Pose()):
+        placeg.place_locations = createPlaceLocations(PoseStamped(header=Header(frame_id="base_link"), pose=place_pose))
     placeg.allowed_planning_time = 5.0
     placeg.planning_options.planning_scene_diff.is_diff = True
     placeg.planning_options.planning_scene_diff.robot_state.is_diff = True

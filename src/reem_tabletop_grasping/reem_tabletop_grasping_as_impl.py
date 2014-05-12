@@ -280,6 +280,8 @@ class ObjectManipulationAS:
             else:
                 placing_pose = goal_message_field.target_pose.pose
             ####  TODO: ADD HERE LOGIC ABOUT SEARCHING GOOD PLACE POSE ####
+            self.update_feedback("Sending place order to MoveIt!")
+            placing_pose = PoseStamped(header=Header(frame_id="base_link"), pose=placing_pose)
             goal = createPlaceGoal(placing_pose, group=goal_message_field.group, target=current_target)
             rospy.loginfo("Sending place goal")
             self.place_ac.send_goal(goal)
@@ -403,9 +405,11 @@ class ObjectManipulationAS:
         while rospy.Time.now() - initial_time < rospy.Duration(timeout_time) and self.last_clusters == None:
             rospy.sleep(0.1)
             count += 1
+
             if count >= wait_time / 10:
-                rospy.loginfo("Depth throtle server call #" + str(num_calls))
                 self.depth_service.call(EmptyRequest())
+                num_calls += 1
+                rospy.loginfo("Depth throtle server call #" + str(num_calls))
         if self.last_clusters == None:
             return False
         else:
