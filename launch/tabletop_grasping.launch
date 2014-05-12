@@ -3,7 +3,7 @@
   <!-- Launch block grasp generator -->
   <node name="grasp_generator_server" pkg="block_grasp_generator" type="block_grasp_generator_server"/>
   <!-- Launch grasping action server -->
-  <node name="grasp_object_server" pkg="reem_tabletop_grasping" type="grasp_object_server.py"/>
+  <node name="grasp_object_server" pkg="reem_tabletop_grasping" type="reem_object_manipulation_as.py"/>
   <!-- Launch the depth throtling service -->
   <node name="depth_throtle_server" pkg="reem_tabletop_grasping" type="depth_throtle_server.py"/>
   <!-- Launch the clusters detection -->

@@ -42,7 +42,7 @@ from geometry_msgs.msg import PoseArray, Pose, Point, PoseStamped
 from std_msgs.msg import Header
 from std_srvs.srv import Empty, EmptyRequest
 # own imports
-from reem_tabletop_grasping.msg import ObjectManipulationAction, ObjectManipulationFeedback, ObjectManipulationActionResult, ObjectManipulationGoal
+from reem_tabletop_grasping.msg import ObjectManipulationAction, ObjectManipulationFeedback, ObjectManipulationActionResult, ObjectManipulationGoal, ObjectManipulationResult
 
 # perception imports & grasp planning imports
 from object_recognition_msgs.msg import RecognizedObjectArray
@@ -53,6 +53,8 @@ from moveit_msgs.msg import PickupAction, PlaceAction
 from moveit_commander import PlanningSceneInterface
 
 from helper_functions import createPickupGoal, dist_between_poses, createPlaceGoal, moveit_error_dict
+import moveit_msgs
+from moveit_msgs.msg._MoveItErrorCodes import MoveItErrorCodes
 
 # TODO: dynamic param to setup debug info
 DEBUG_MODE = True
@@ -108,8 +110,8 @@ class ObjectManipulationAS:
         # blocking action server
         rospy.loginfo("Creating Action Server '" + name + "'...")
         self.grasp_obj_as = ActionServer(name, ObjectManipulationAction, self.goal_callback, self.cancel_callback, False)
-        self.feedback = ObjectManipulationFeedback()
-        self.result = ObjectManipulationActionResult()
+        self.as_feedback = ObjectManipulationFeedback()
+        self.as_result = ObjectManipulationActionResult()
         self.current_goal = None
 
         # Take care of left and right arm grasped stuff
@@ -138,8 +140,10 @@ class ObjectManipulationAS:
             self.current_goal.set_accepted()
             #run the corresponding operation
             if self.current_goal.get_goal().operation == ObjectManipulationGoal.PICK:
+                rospy.loginfo("ObjectManipulation: PICK!")
                 self.pick_operation()
             elif self.current_goal.get_goal().operation == ObjectManipulationGoal.PLACE:
+                rospy.loginfo("ObjectManipulation: PLACE!")
                 self.place_operation()
             else:
                 rospy.logerr("ObjectManipulation: Erroneous operation!")
@@ -151,8 +155,9 @@ class ObjectManipulationAS:
         self.current_goal.set_canceled()
 
     def pick_operation(self):
-        if self.current_goal:
-            goal_message_field = ObjectManipulationGoal()
+        """Execute pick operation"""
+        if self.message_fields_ok():
+            self.as_result = ObjectManipulationResult()
             goal_message_field = self.current_goal.get_goal()
             self.update_feedback("Checking hand to use")
             # Check which arm group was requested and if it's currently free of objects
@@ -213,8 +218,7 @@ class ObjectManipulationAS:
                 return
             if DEBUG_MODE:  # TODO: change to dynamic param
                 publish_grasps_as_poses(grasp_list)
-            self.feedback.grasps = grasp_list
-            self.current_goal.publish_feedback(self.feedback)
+            self.current_goal.publish_feedback(self.as_feedback)
             ########
             self.update_feedback("Setup planning scene")
             #remove old objects
@@ -223,8 +227,7 @@ class ObjectManipulationAS:
             # Add object to grasp to planning scene
             self.scene.add_box(self.current_side + "_hand_object", object_pose,
                                (obj_bbox_dims[0], obj_bbox_dims[1], obj_bbox_dims[2]))
-            self.result.object_scene_name = self.current_side + "_hand_object"
-            self.right_hand_object = self.current_side + "_hand_object"
+            self.as_result.object_scene_name = self.current_side + "_hand_object"
             ########
             self.update_feedback("Execute grasps")
             pug = createPickupGoal("object_to_grasp", grasp_list, group=goal_message_field.group)
@@ -236,13 +239,24 @@ class ObjectManipulationAS:
             rospy.loginfo("Human readable error: " + str(moveit_error_dict[result.error_code.val]))
             ########
             self.update_feedback("finished")
-            self.result.object_pose = object_pose
-            self.result.result.error_code = result.error_code.val
-            self.result.result.error_message = str(moveit_error_dict[result.error_code.val])
-            self.current_goal.set_succeeded(result=self.result)
+            self.as_result.object_pose = object_pose
+            self.as_result.error_code = result.error_code
+            self.as_result.error_message = str(moveit_error_dict[result.error_code.val])
+            if result.error_code.val == MoveItErrorCodes.SUCCESS:
+                if self.current_side == 'right':
+                    self.right_hand_object = self.current_side + "_hand_object"
+                elif self.current_side == 'left':
+                    self.left_hand_object = self.current_side + "_hand_object"
+                self.current_goal.set_succeeded(result=self.as_result)
+            else:
+                self.update_aborted(text="MoveIt pick failed", manipulation_result=self.as_result)
+        else:
+            self.update_aborted("Goal fields not correctly fulfilled")
 
     def place_operation(self):
-        if self.current_goal:
+        """Execute the place operation"""
+        if self.message_fields_ok():
+            self.as_result = ObjectManipulationResult()
             goal_message_field = self.current_goal.get_goal()
             self.update_feedback("Checking arm to use")
             # Check which arm group was requested and if it currently has an object
@@ -251,11 +265,13 @@ class ObjectManipulationAS:
                     self.update_aborted("Right hand does not contain an object.")
                     return  # necessary?
                 self.current_side = 'right'
+                current_target = self.right_hand_object
             elif 'left' in goal_message_field.group:
                 if not self.left_hand_object:
                     self.update_aborted("Left hand does not contain an object.")
                     return
                 self.current_side = 'left'
+                current_target = self.left_hand_object
 
             # transform pose to base_link if needed
             if goal_message_field.target_pose.header.frame_id != "base_link":
@@ -264,38 +280,64 @@ class ObjectManipulationAS:
             else:
                 placing_pose = goal_message_field.target_pose.pose
             ####  TODO: ADD HERE LOGIC ABOUT SEARCHING GOOD PLACE POSE ####
-            goal = createPlaceGoal(placing_pose, group=goal_message_field.group, "object_to_grasp")
+            goal = createPlaceGoal(placing_pose, group=goal_message_field.group, target=current_target)
             rospy.loginfo("Sending place goal")
             self.place_ac.send_goal(goal)
             rospy.loginfo("Waiting for result...")
             self.place_ac.wait_for_result()
             result = self.place_ac.get_result()
             rospy.loginfo("Human readable error: " + str(moveit_error_dict[result.error_code.val]))
-            self.result.object_pose = placing_pose
+            self.as_result.object_pose = placing_pose
             # Emptying hand
             self.update_feedback("Emptying hand")
             if self.current_side == 'right':
-                self.result.result.object_scene_name = self.right_hand_object
+                self.as_result.object_scene_name = current_target
                 self.right_hand_object = None
             elif self.current_side == 'left':
-                self.result.result.object_scene_name = self.left_hand_object
+                self.as_result.object_scene_name = current_target
                 self.left_hand_object = None
-            self.result.result.error_code = result.error_code.val
-            self.result.result.error_message = str(moveit_error_dict[result.error_code.val])
-            self.current_goal.set_succeeded(result=self.result)
+
+            self.as_result.error_code = result.error_code
+            self.as_result.error_message = str(moveit_error_dict[result.error_code.val])
+            if result.error_code.val == MoveItErrorCodes.SUCCESS:
+                self.current_goal.set_succeeded(result=self.as_result)
+            else:
+                self.update_aborted(text="MoveIt place failed", manipulation_result=self.as_result)
+        else:
+            self.update_aborted("Goal fields not correctly fulfilled")
+
+    def message_fields_ok(self):
+        """Check if the minimal fields for the message are fulfilled"""
+        if self.current_goal:
+            goal_message_field = self.current_goal.get_goal()
+            if len(goal_message_field.group) == 0:
+                rospy.logwarn("Group field empty.")
+                return False
+            if goal_message_field.operation != ObjectManipulationGoal.PICK and goal_message_field.operation != ObjectManipulationGoal.PLACE:
+                rospy.logwarn("Asked for an operation different from PICK or PLACE: " + str(goal_message_field.operation))
+                return False
+            if len(goal_message_field.target_pose.header.frame_id) == 0:
+                rospy.logwarn("Target pose frame_id is empty")
+                return False
+            return True
 
     def update_feedback(self, text):
-        self.feedback.last_state = text
-        self.current_goal.publish_feedback(self.feedback)
+        """Publish feedback with given text"""
+        self.as_feedback.last_state = text
+        self.current_goal.publish_feedback(self.as_feedback)
 
-    def update_aborted(self, text=""):
+    def update_aborted(self, text="", manipulation_result=None):
+        """Publish feedback and abort with the text give and optionally an ObjectManipulationResult already fulfilled"""
         self.update_feedback("aborted." + text)
-        aborted_result = ObjectManipulationActionResult()
-        aborted_result.result.error_message = text
-        self.current_goal.set_aborted(result=aborted_result)
+        if manipulation_result == None:
+            aborted_result = ObjectManipulationResult()
+            aborted_result.error_message = text
+            self.current_goal.set_aborted(result=aborted_result)
+        else:
+            self.current_goal.set_aborted(result=manipulation_result)
 
     def generate_grasps(self, pose, width):
-        #send request to block grasp generator service
+        """Send request to block grasp generator service"""
         if not self.grasps_ac.wait_for_server(rospy.Duration(5.0)):
             return []
         rospy.loginfo("Successfully connected.")
