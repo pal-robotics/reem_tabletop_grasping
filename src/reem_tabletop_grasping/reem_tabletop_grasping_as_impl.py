@@ -230,7 +230,7 @@ class ObjectManipulationAS:
             self.as_result.object_scene_name = self.current_side + "_hand_object"
             ########
             self.update_feedback("Execute grasps")
-            pug = createPickupGoal("object_to_grasp", grasp_list, group=goal_message_field.group)
+            pug = createPickupGoal(self.current_side + "_hand_object", grasp_list, group=goal_message_field.group)
             rospy.loginfo("Sending pickup goal")
             self.pickup_ac.send_goal(pug)
             rospy.loginfo("Waiting for result...")
