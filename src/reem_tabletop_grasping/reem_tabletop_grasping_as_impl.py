@@ -42,7 +42,7 @@ from geometry_msgs.msg import PoseArray, Pose, Point, PoseStamped
 from std_msgs.msg import Header
 from std_srvs.srv import Empty, EmptyRequest
 # own imports
-from reem_tabletop_grasping.msg import ObjectManipulationAction, ObjectManipulationFeedback, ObjectManipulationActionResult
+from reem_tabletop_grasping.msg import ObjectManipulationAction, ObjectManipulationFeedback, ObjectManipulationActionResult, ObjectManipulationGoal
 
 # perception imports & grasp planning imports
 from object_recognition_msgs.msg import RecognizedObjectArray
@@ -115,8 +115,9 @@ class ObjectManipulationAS:
         # Take care of left and right arm grasped stuff
         self.right_hand_object = None
         self.left_hand_object = None
+        self.current_side = 'right'
 
-        rospy.loginfo("Starting Action Server!")
+        rospy.loginfo("Starting '" + OBJECT_MANIPULATION_AS + "' Action Server!")
         self.grasp_obj_as.start()
 
     def objects_callback(self, data):
@@ -135,8 +136,13 @@ class ObjectManipulationAS:
             #store and accept new goal
             self.current_goal = goal
             self.current_goal.set_accepted()
-            #run grasping state machine
-            self.grasping_sm()
+            #run the corresponding operation
+            if self.current_goal.get_goal().operation == ObjectManipulationGoal.PICK:
+                self.pick_operation()
+            elif self.current_goal.get_goal().operation == ObjectManipulationGoal.PLACE:
+                self.place_operation()
+            else:
+                rospy.logerr("ObjectManipulation: Erroneous operation!")
             #finished, get rid of goal
             self.current_goal = None
 
@@ -144,23 +150,37 @@ class ObjectManipulationAS:
         #TODO stop motions?
         self.current_goal.set_canceled()
 
-    def grasping_sm(self):
+    def pick_operation(self):
         if self.current_goal:
+            goal_message_field = ObjectManipulationGoal()
             goal_message_field = self.current_goal.get_goal()
+            self.update_feedback("Checking hand to use")
+            # Check which arm group was requested and if it's currently free of objects
+            if 'right' in goal_message_field.group:
+                if self.right_hand_object:  # Something already in the hand
+                    self.update_aborted("Right hand already contains an object.")
+                    return  # necessary?
+                self.current_side = 'right'
+            elif 'left' in goal_message_field.group:
+                if self.left_hand_object:
+                    self.update_aborted("Left hand already contains an object.")
+                    return
+                self.current_side = 'left'
+
             # Publish pose of goal position
             if DEBUG_MODE:
-                self.to_grasp_object_pose_pub.publish(goal_message_field.pose_of_cluster)
+                self.to_grasp_object_pose_pub.publish(goal_message_field.target_pose)
             self.update_feedback("Detecting clusters")
             if not self.wait_for_recognized_array(wait_time=5, timeout_time=10):  # wait until we get clusters published
                 self.update_aborted("Failed detecting clusters")
 
             # Search closer cluster
             # transform pose to base_link if needed
-            if goal_message_field.pose_of_cluster.header.frame_id != "base_link":
-                self.tf_listener.waitForTransform("base_link", goal_message_field.pose_of_cluster.header.frame_id, goal_message_field.pose_of_cluster.header.stamp, rospy.Duration(5))
-                object_to_grasp_pose = self.tf_listener.transformPose("base_link", goal_message_field.pose_of_cluster)
+            if goal_message_field.target_pose.header.frame_id != "base_link":
+                self.tf_listener.waitForTransform("base_link", goal_message_field.target_pose.header.frame_id, goal_message_field.target_pose.header.stamp, rospy.Duration(5))
+                object_to_grasp_pose = self.tf_listener.transformPose("base_link", goal_message_field.target_pose)
             else:
-                object_to_grasp_pose = goal_message_field.pose_of_cluster.pose
+                object_to_grasp_pose = goal_message_field.target_pose.pose
 
             self.update_feedback("Searching closer cluster while clustering")
             (closest_cluster_id, (object_points, obj_bbox_dims, object_bounding_box, object_pose)) = self.get_id_of_closest_cluster_to_pose(object_to_grasp_pose)
@@ -168,11 +188,11 @@ class ObjectManipulationAS:
             rospy.logdebug("in AS: Closest cluster id is: " + str(closest_cluster_id))
             #TODO visualize bbox
             #TODO publish filtered pointcloud?
-            rospy.loginfo("BBOX: " + str(obj_bbox_dims))
+            rospy.logdebug("BBOX: " + str(obj_bbox_dims))
             ########
-            self.update_feedback("check reachability")
+            self.update_feedback("Check reachability")
             ########
-            self.update_feedback("generate grasps")
+            self.update_feedback("Generating grasps")
             rospy.logdebug("Object pose before tf thing is: " + str(object_pose))
             #transform pose to base_link, IS THIS NECESSARY?? should be a function in any case
             self.tf_listener.waitForTransform("base_link", object_pose.header.frame_id, object_pose.header.stamp, rospy.Duration(15))
@@ -189,43 +209,80 @@ class ObjectManipulationAS:
             grasp_list = self.generate_grasps(object_pose, obj_bbox_dims[0])  # width is the bbox size on x
             # check if there are grasps, if not, abort
             if len(grasp_list) == 0:
-                self.update_aborted("no grasps received")
+                self.update_aborted("No grasps received")
                 return
             if DEBUG_MODE:  # TODO: change to dynamic param
                 publish_grasps_as_poses(grasp_list)
             self.feedback.grasps = grasp_list
             self.current_goal.publish_feedback(self.feedback)
-            self.result.grasps = grasp_list
             ########
-            self.update_feedback("setup planning scene")
+            self.update_feedback("Setup planning scene")
             #remove old objects
-            self.scene.remove_world_object("object_to_grasp")
-            # add object to grasp to planning scene
-            self.scene.add_box("object_to_grasp", object_pose,
+            #self.scene.remove_world_object("object_to_grasp")
+
+            # Add object to grasp to planning scene
+            self.scene.add_box(self.current_side + "_hand_object", object_pose,
                                (obj_bbox_dims[0], obj_bbox_dims[1], obj_bbox_dims[2]))
-            self.result.object_scene_name = "object_to_grasp"
+            self.result.object_scene_name = self.current_side + "_hand_object"
+            self.right_hand_object = self.current_side + "_hand_object"
             ########
-            if self.current_goal.get_goal().execute_grasp:
-                self.update_feedback("execute grasps")
-                pug = createPickupGoal("object_to_grasp", grasp_list)
-                rospy.loginfo("Sending goal")
-                self.pickup_ac.send_goal(pug)
-                rospy.loginfo("Waiting for result")
-                self.pickup_ac.wait_for_result()
-                result = self.pickup_ac.get_result()
-                #rospy.loginfo("Result is:")
-                #print result
-                rospy.loginfo("Human readable error: " + str(moveit_error_dict[result.error_code.val]))
+            self.update_feedback("Execute grasps")
+            pug = createPickupGoal("object_to_grasp", grasp_list, group=goal_message_field.group)
+            rospy.loginfo("Sending pickup goal")
+            self.pickup_ac.send_goal(pug)
+            rospy.loginfo("Waiting for result...")
+            self.pickup_ac.wait_for_result()
+            result = self.pickup_ac.get_result()
+            rospy.loginfo("Human readable error: " + str(moveit_error_dict[result.error_code.val]))
             ########
             self.update_feedback("finished")
             self.result.object_pose = object_pose
-            #bounding box in a point message
-            self.result.bounding_box = Point()
-            self.result.bounding_box.x = obj_bbox_dims[0]
-            self.result.bounding_box.y = obj_bbox_dims[1]
-            self.result.bounding_box.z = obj_bbox_dims[2]
+            self.result.result.error_code = result.error_code.val
+            self.result.result.error_message = str(moveit_error_dict[result.error_code.val])
             self.current_goal.set_succeeded(result=self.result)
-            #self.current_goal.set_aborted()
+
+    def place_operation(self):
+        if self.current_goal:
+            goal_message_field = self.current_goal.get_goal()
+            self.update_feedback("Checking arm to use")
+            # Check which arm group was requested and if it currently has an object
+            if 'right' in goal_message_field.group:
+                if not self.right_hand_object:  # Something already in the hand
+                    self.update_aborted("Right hand does not contain an object.")
+                    return  # necessary?
+                self.current_side = 'right'
+            elif 'left' in goal_message_field.group:
+                if not self.left_hand_object:
+                    self.update_aborted("Left hand does not contain an object.")
+                    return
+                self.current_side = 'left'
+
+            # transform pose to base_link if needed
+            if goal_message_field.target_pose.header.frame_id != "base_link":
+                self.tf_listener.waitForTransform("base_link", goal_message_field.target_pose.header.frame_id, goal_message_field.target_pose.header.stamp, rospy.Duration(5))
+                placing_pose = self.tf_listener.transformPose("base_link", goal_message_field.target_pose)
+            else:
+                placing_pose = goal_message_field.target_pose.pose
+            ####  TODO: ADD HERE LOGIC ABOUT SEARCHING GOOD PLACE POSE ####
+            goal = createPlaceGoal(placing_pose, group=goal_message_field.group, "object_to_grasp")
+            rospy.loginfo("Sending place goal")
+            self.place_ac.send_goal(goal)
+            rospy.loginfo("Waiting for result...")
+            self.place_ac.wait_for_result()
+            result = self.place_ac.get_result()
+            rospy.loginfo("Human readable error: " + str(moveit_error_dict[result.error_code.val]))
+            self.result.object_pose = placing_pose
+            # Emptying hand
+            self.update_feedback("Emptying hand")
+            if self.current_side == 'right':
+                self.result.result.object_scene_name = self.right_hand_object
+                self.right_hand_object = None
+            elif self.current_side == 'left':
+                self.result.result.object_scene_name = self.left_hand_object
+                self.left_hand_object = None
+            self.result.result.error_code = result.error_code.val
+            self.result.result.error_message = str(moveit_error_dict[result.error_code.val])
+            self.current_goal.set_succeeded(result=self.result)
 
     def update_feedback(self, text):
         self.feedback.last_state = text
@@ -233,7 +290,9 @@ class ObjectManipulationAS:
 
     def update_aborted(self, text=""):
         self.update_feedback("aborted." + text)
-        self.current_goal.set_aborted()
+        aborted_result = ObjectManipulationActionResult()
+        aborted_result.result.error_message = text
+        self.current_goal.set_aborted(result=aborted_result)
 
     def generate_grasps(self, pose, width):
         #send request to block grasp generator service
