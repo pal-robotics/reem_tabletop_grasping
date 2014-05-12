@@ -221,9 +221,6 @@ class ObjectManipulationAS:
             self.current_goal.publish_feedback(self.as_feedback)
             ########
             self.update_feedback("Setup planning scene")
-            #remove old objects
-            #self.scene.remove_world_object("object_to_grasp")
-
             # Add object to grasp to planning scene
             self.scene.add_box(self.current_side + "_hand_object", object_pose,
                                (obj_bbox_dims[0], obj_bbox_dims[1], obj_bbox_dims[2]))
@@ -249,6 +246,8 @@ class ObjectManipulationAS:
                     self.left_hand_object = self.current_side + "_hand_object"
                 self.current_goal.set_succeeded(result=self.as_result)
             else:
+                # Remove object as it has not been picked
+                self.scene.remove_world_object(self.current_side + "_hand_object")
                 self.update_aborted(text="MoveIt pick failed", manipulation_result=self.as_result)
         else:
             self.update_aborted("Goal fields not correctly fulfilled")
