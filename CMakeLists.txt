@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 2.8.3)
 project(reem_tabletop_grasping)
 
 find_package(catkin REQUIRED COMPONENTS
-  actionlib actionlib_msgs message_generation block_grasp_generator geometry_msgs
+  actionlib actionlib_msgs message_generation moveit_simple_grasps geometry_msgs
   moveit_commander moveit_msgs object_recognition_clusters
   object_recognition_msgs rospy std_msgs tf trajectory_msgs
 )
@@ -11,8 +11,7 @@ catkin_python_setup()
 
 add_action_files(
   DIRECTORY action
-  FILES GraspObject.action
-        ObjectManipulation.action
+  FILES ObjectManipulation.action
 )
 
 generate_messages(
@@ -21,7 +20,7 @@ generate_messages(
 )
 
 catkin_package(
- CATKIN_DEPENDS actionlib_msgs message_runtime actionlib block_grasp_generator 
+ CATKIN_DEPENDS actionlib_msgs message_runtime actionlib moveit_simple_grasps 
                 geometry_msgs moveit_commander moveit_msgs 
                 object_recognition_clusters object_recognition_msgs 
                 rospy std_msgs tf trajectory_msgs
