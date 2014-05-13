@@ -47,7 +47,7 @@ from reem_tabletop_grasping.msg import ObjectManipulationAction, ObjectManipulat
 # perception imports & grasp planning imports
 from object_recognition_msgs.msg import RecognizedObjectArray
 from object_recognition_clusters import ClusterBoundingBoxFinder
-from block_grasp_generator.msg import GenerateBlockGraspsAction, GenerateBlockGraspsGoal
+from moveit_simple_grasps.msg import GenerateGraspsAction, GenerateGraspsGoal, GraspGeneratorOptions
 # manipulation imports
 from moveit_msgs.msg import PickupAction, PlaceAction
 from moveit_commander import PlanningSceneInterface
@@ -65,7 +65,7 @@ RECOGNIZED_OBJECT_ARRAY_TOPIC = '/recognized_object_array'
 TO_BE_GRASPED_OBJECT_POSE_TOPIC = '/to_grasp_object_pose'
 PICKUP_AS = '/pickup'
 PLACE_AS = '/place'
-GRASP_GENERATOR_AS = '/grasp_generator_server/generate'
+GRASP_GENERATOR_AS = '/moveit_simple_grasps_server/generate'
 DEPTH_THROTLE_SRV = '/depth_throtle'
 
 OBJECT_MANIPULATION_AS = 'object_manipulation_server'
@@ -97,7 +97,7 @@ class ObjectManipulationAS:
         self.place_ac.wait_for_server()
 
         rospy.loginfo("Connecting to grasp generator AS '" + GRASP_GENERATOR_AS + "'...")
-        self.grasps_ac = SimpleActionClient(GRASP_GENERATOR_AS, GenerateBlockGraspsAction)
+        self.grasps_ac = SimpleActionClient(GRASP_GENERATOR_AS, GenerateGraspsAction)
         self.grasps_ac.wait_for_server()
 
         rospy.loginfo("Connecting to depth throttle server '" + DEPTH_THROTLE_SRV + "'...")
@@ -289,18 +289,17 @@ class ObjectManipulationAS:
             result = self.place_ac.get_result()
             rospy.loginfo("Human readable error: " + str(moveit_error_dict[result.error_code.val]))
             self.as_result.object_pose = placing_pose
-            # Emptying hand
-            self.update_feedback("Emptying hand")
-            if self.current_side == 'right':
-                self.as_result.object_scene_name = current_target
-                self.right_hand_object = None
-            elif self.current_side == 'left':
-                self.as_result.object_scene_name = current_target
-                self.left_hand_object = None
-
             self.as_result.error_code = result.error_code
             self.as_result.error_message = str(moveit_error_dict[result.error_code.val])
             if result.error_code.val == MoveItErrorCodes.SUCCESS:
+                # Emptying hand
+                self.update_feedback("Emptying hand")
+                if self.current_side == 'right':
+                    self.as_result.object_scene_name = current_target
+                    self.right_hand_object = None
+                elif self.current_side == 'left':
+                    self.as_result.object_scene_name = current_target
+                    self.left_hand_object = None
                 self.current_goal.set_succeeded(result=self.as_result)
             else:
                 self.update_aborted(text="MoveIt place failed", manipulation_result=self.as_result)
@@ -339,19 +338,18 @@ class ObjectManipulationAS:
 
     def generate_grasps(self, pose, width):
         """Send request to block grasp generator service"""
-        if not self.grasps_ac.wait_for_server(rospy.Duration(5.0)):
-            return []
-        rospy.loginfo("Successfully connected.")
-        goal = GenerateBlockGraspsGoal()
+        goal = GenerateGraspsGoal()
         goal.pose = pose.pose
         goal.width = width
+        grasp_options = GraspGeneratorOptions()
+        grasp_options.grasp_axis = GraspGeneratorOptions.GRASP_AXIS_Y
+        grasp_options.grasp_direction = GraspGeneratorOptions.GRASP_DIRECTION_DOWN
+        grasp_options.grasp_rotation = GraspGeneratorOptions.GRASP_ROTATION_HALF
+        goal.options.append(grasp_options)
         self.grasps_ac.send_goal(goal)
-        rospy.loginfo("Sent goal, waiting:\n" + str(goal))
-        t_start = rospy.Time.now()
+        if DEBUG_MODE:
+            rospy.loginfo("Sent goal, waiting:\n" + str(goal))
         self.grasps_ac.wait_for_result()
-        t_end = rospy.Time.now()
-        t_total = t_end - t_start
-        rospy.loginfo("Result received in " + str(t_total.to_sec()))
         grasp_list = self.grasps_ac.get_result().grasps
         return grasp_list
 

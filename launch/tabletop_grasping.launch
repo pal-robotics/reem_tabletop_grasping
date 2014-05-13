@@ -1,7 +1,9 @@
 <launch>
 
   <!-- Launch block grasp generator -->
-  <node name="grasp_generator_server" pkg="block_grasp_generator" type="block_grasp_generator_server"/>
+   <include file="$(find moveit_simple_grasps)/launch/grasp_generator_server.launch" >
+      <arg name="robot" value="reem" />
+   </include>
   <!-- Launch grasping action server -->
   <node name="grasp_object_server" pkg="reem_tabletop_grasping" type="reem_object_manipulation_as.py"/>
   <!-- Launch the depth throtling service -->
