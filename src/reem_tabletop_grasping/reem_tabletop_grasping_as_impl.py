@@ -300,6 +300,8 @@ class ObjectManipulationAS:
                 elif self.current_side == 'left':
                     self.as_result.object_scene_name = current_target
                     self.left_hand_object = None
+                # Removing object from the collision world
+                self.scene.remove_world_object(current_target)
                 self.current_goal.set_succeeded(result=self.as_result)
             else:
                 self.update_aborted(text="MoveIt place failed", manipulation_result=self.as_result)
