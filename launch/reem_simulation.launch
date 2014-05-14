@@ -15,7 +15,7 @@
    <node name="move_reem_head_down" pkg="reem_tabletop_grasping" type="look_down.py"/>
 
    <!-- Open both hands to ease plans from starting position -->
-   <node name="move_reem_head_down" pkg="reem_tabletop_grasping" type="open_hands.py"/>
+   <node name="open_reem_hands" pkg="reem_tabletop_grasping" type="open_hands.py"/>
 
    <!-- Reduce simulation pointcloud publishing rate -->
     <include file="$(find reem_rgbd_launch)/launch/simulation_reduce_rate.launch" >
