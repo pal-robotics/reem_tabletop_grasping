@@ -61,7 +61,7 @@ if __name__ == '__main__':
     manip_as.wait_for_result()
     result = manip_as.get_result()
     rospy.loginfo("Got result:\n" + str(result))
-    if not result.error_code == MoveItErrorCodes.SUCCESS:
+    if not result.error_code.val == MoveItErrorCodes.SUCCESS:
         rospy.logerr("Not executing place as pick failed")
         exit()
 
