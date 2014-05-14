@@ -1,12 +1,14 @@
 <launch>
-  <!-- Launch table detection + clustering with object recognition kitchen -->
-<!--
-  <node name="tabletop_clustering" pkg="object_recognition_ros" type="server" args="-c $(find reem_object_recognition)/config/tabletop/detection.clusters.ros.ork.reem"/> 
--->
-  <!-- -->
-  <node name="grasp_generator_server" pkg="block_grasp_generator" type="block_grasp_generator_server"/>
-  <!-- -->
-  <node name="grasp_object_server" pkg="reem_tabletop_grasping" type="grasp_object_server.py"/>
-  
+
+  <!-- Launch block grasp generator -->
+   <include file="$(find moveit_simple_grasps)/launch/grasp_generator_server.launch" >
+      <arg name="robot" value="reem" />
+   </include>
+  <!-- Launch grasping action server -->
+  <node name="grasp_object_server" pkg="reem_tabletop_grasping" type="reem_object_manipulation_as.py"/>
+  <!-- Launch the depth throtling service -->
   <node name="depth_throtle_server" pkg="reem_tabletop_grasping" type="depth_throtle_server.py"/>
+  <!-- Launch the clusters detection -->
+  <node name="clusters_detection" pkg="object_recognition_core" type="detection" args="-c $(find reem_object_recognition)/config/tabletop/detection.clusters.ros.ork.reem.throtled" />
+
 </launch>
