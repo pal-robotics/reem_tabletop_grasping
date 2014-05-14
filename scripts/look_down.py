@@ -82,7 +82,7 @@ if __name__ == '__main__':
     head_as.wait_for_server()
     rospy.sleep(1.0)
     rospy.loginfo("Connected, sending goal.")
-    goal = createHeadGoal(0.0, 1.0)
+    goal = createHeadGoal(-0.3, 1.0)
     head_as.send_goal(goal)
     rospy.loginfo("Goal sent, waiting...")
     head_as.wait_for_result()
