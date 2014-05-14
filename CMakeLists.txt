@@ -28,6 +28,7 @@ catkin_package(
 
 install (PROGRAMS scripts/reem_object_manipulation_as.py
                   scripts/look_down.py
+                  scripts/open_hands.py
                   scripts/send_pick.py
                   scripts/send_place.py
                   scripts/send_pick_and_place.py
