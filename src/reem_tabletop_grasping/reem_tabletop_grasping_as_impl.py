@@ -120,7 +120,7 @@ class ObjectManipulationAS:
         self.current_goal = None
 
         # Take care of left and right arm grasped stuff
-        self.right_hand_object = "right_hand_object"
+        self.right_hand_object = None #"right_hand_object"
         self.left_hand_object = None
         self.current_side = 'right'
 
