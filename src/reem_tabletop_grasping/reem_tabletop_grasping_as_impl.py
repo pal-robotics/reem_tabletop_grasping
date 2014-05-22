@@ -54,6 +54,7 @@ from moveit_commander import PlanningSceneInterface
 
 from helper_functions import createPickupGoal, dist_between_poses, createPlaceGoal, moveit_error_dict
 from moveit_msgs.msg._MoveItErrorCodes import MoveItErrorCodes
+import copy
 
 # TODO: dynamic param to setup debug info
 DEBUG_MODE = True
@@ -129,11 +130,11 @@ class ObjectManipulationAS:
 
     def objects_callback(self, data):
         rospy.loginfo(rospy.get_name() + ": This message contains %d objects." % len(data.objects))
-        self.last_clusters = data
+        self.last_clusters = copy.deepcopy(data)
 
-    def tables_callback(self, data):
-        rospy.loginfo(rospy.get_name() + ": This message contains %d tables." % len(data.tables))
-        self.last_tables = data
+    def tables_callback(self, data_tables):
+        rospy.loginfo(rospy.get_name() + ": This message contains %d tables." % len(data_tables.tables))
+        self.last_tables = copy.deepcopy(data_tables)
 
     def goal_callback(self, goal):
         if self.current_goal:
@@ -486,7 +487,6 @@ class ObjectManipulationAS:
         rospy.loginfo("Depth throttle server call #" + str(num_calls))
         rospy.loginfo("Waiting for a table array...")
         while rospy.Time.now() - initial_time < rospy.Duration(timeout_time) and self.last_tables == None:
-            print "self.last_tables is: " + str(self.last_tables)
             rospy.sleep(0.1)
             count += 1
 
