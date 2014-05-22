@@ -45,7 +45,7 @@ from std_srvs.srv import Empty, EmptyRequest
 from reem_tabletop_grasping.msg import ObjectManipulationAction, ObjectManipulationFeedback, ObjectManipulationActionResult, ObjectManipulationGoal, ObjectManipulationResult
 
 # perception imports & grasp planning imports
-from object_recognition_msgs.msg import RecognizedObjectArray
+from object_recognition_msgs.msg import RecognizedObjectArray, TableArray, Table
 from object_recognition_clusters import ClusterBoundingBoxFinder
 from moveit_simple_grasps.msg import GenerateGraspsAction, GenerateGraspsGoal, GraspGeneratorOptions
 # manipulation imports
@@ -53,7 +53,6 @@ from moveit_msgs.msg import PickupAction, PlaceAction
 from moveit_commander import PlanningSceneInterface
 
 from helper_functions import createPickupGoal, dist_between_poses, createPlaceGoal, moveit_error_dict
-import moveit_msgs
 from moveit_msgs.msg._MoveItErrorCodes import MoveItErrorCodes
 
 # TODO: dynamic param to setup debug info
@@ -62,13 +61,15 @@ if DEBUG_MODE:
     from visualizing_functions import publish_grasps_as_poses
 
 RECOGNIZED_OBJECT_ARRAY_TOPIC = '/recognized_object_array'
+TABLES_ARRAY_TOPIC = '/tables_array'
 TO_BE_GRASPED_OBJECT_POSE_TOPIC = '/to_grasp_object_pose'
 PICKUP_AS = '/pickup'
 PLACE_AS = '/place'
 GRASP_GENERATOR_AS = '/moveit_simple_grasps_server/generate'
 DEPTH_THROTLE_SRV = '/depth_throtle'
-
 OBJECT_MANIPULATION_AS = 'object_manipulation_server'
+
+OFFSET_OVER_TABLE_PLACING = 0.03
 
 
 class ObjectManipulationAS:
@@ -83,7 +84,11 @@ class ObjectManipulationAS:
         self.cbbf = ClusterBoundingBoxFinder(self.tf_listener, self.tf_broadcaster, "base_link")
         self.last_clusters = None
         rospy.loginfo("Subscribing to '" + RECOGNIZED_OBJECT_ARRAY_TOPIC + "'...")
-        self.sub = rospy.Subscriber(RECOGNIZED_OBJECT_ARRAY_TOPIC, RecognizedObjectArray, self.objects_callback)
+        self.sub_objects = rospy.Subscriber(RECOGNIZED_OBJECT_ARRAY_TOPIC, RecognizedObjectArray, self.objects_callback)
+
+        self.last_tables = None
+        rospy.loginfo("Subscribing to '" + TABLES_ARRAY_TOPIC + "'...")
+        self.sub_tables = rospy.Subscriber(TABLES_ARRAY_TOPIC, TableArray, self.tables_callback)
 
         if DEBUG_MODE:
             self.to_grasp_object_pose_pub = rospy.Publisher(TO_BE_GRASPED_OBJECT_POSE_TOPIC, PoseStamped)
@@ -115,7 +120,7 @@ class ObjectManipulationAS:
         self.current_goal = None
 
         # Take care of left and right arm grasped stuff
-        self.right_hand_object = None
+        self.right_hand_object = "right_hand_object"
         self.left_hand_object = None
         self.current_side = 'right'
 
@@ -125,6 +130,10 @@ class ObjectManipulationAS:
     def objects_callback(self, data):
         rospy.loginfo(rospy.get_name() + ": This message contains %d objects." % len(data.objects))
         self.last_clusters = data
+
+    def tables_callback(self, data):
+        rospy.loginfo(rospy.get_name() + ": This message contains %d tables." % len(data.tables))
+        self.last_tables = data
 
     def goal_callback(self, goal):
         if self.current_goal:
@@ -176,6 +185,7 @@ class ObjectManipulationAS:
             if DEBUG_MODE:
                 self.to_grasp_object_pose_pub.publish(goal_message_field.target_pose)
             self.update_feedback("Detecting clusters")
+
             if not self.wait_for_recognized_array(wait_time=5, timeout_time=10):  # wait until we get clusters published
                 self.update_aborted("Failed detecting clusters")
 
@@ -272,15 +282,38 @@ class ObjectManipulationAS:
                 self.current_side = 'left'
                 current_target = self.left_hand_object
 
+            # Publish pose of goal position
+            if DEBUG_MODE:
+                self.to_grasp_object_pose_pub.publish(goal_message_field.target_pose)
+
             # transform pose to base_link if needed
             if goal_message_field.target_pose.header.frame_id != "base_link":
                 self.tf_listener.waitForTransform("base_link", goal_message_field.target_pose.header.frame_id, goal_message_field.target_pose.header.stamp, rospy.Duration(5))
                 placing_pose = self.tf_listener.transformPose("base_link", goal_message_field.target_pose)
             else:
                 placing_pose = goal_message_field.target_pose.pose
-            ####  TODO: ADD HERE LOGIC ABOUT SEARCHING GOOD PLACE POSE ####
+
+            self.update_feedback("Detecting tables")
+            if not self.wait_for_tables_array(wait_time=5, timeout_time=10):  # wait until we get tables published
+                self.update_aborted("Failed detecting tables")
+
+            # Search closest table
+            # transform pose to base_link if needed
+            if goal_message_field.target_pose.header.frame_id != "base_link":
+                self.tf_listener.waitForTransform("base_link", goal_message_field.target_pose.header.frame_id, goal_message_field.target_pose.header.stamp, rospy.Duration(5))
+                object_to_place_pose = self.tf_listener.transformPose("base_link", goal_message_field.target_pose)
+            else:
+                object_to_place_pose = goal_message_field.target_pose.pose
+
+            self.update_feedback("Searching closer table to place")
+            (closest_tablemsg, closest_table_posestamped) = self.get_pose_of_closest_table(object_to_place_pose)
+            # Compute best position, which is adjusting height of the placing pose
+            # free space should be checked, how can we do this?
+            placing_pose = PoseStamped(header=Header(frame_id="base_link"), pose=object_to_place_pose)
+            placing_pose.pose.position.z = closest_table_posestamped.pose.position.z + OFFSET_OVER_TABLE_PLACING
+
+            # Send place
             self.update_feedback("Sending place order to MoveIt!")
-            placing_pose = PoseStamped(header=Header(frame_id="base_link"), pose=placing_pose)
             goal = createPlaceGoal(placing_pose, group=goal_message_field.group, target=current_target)
             rospy.loginfo("Sending place goal")
             self.place_ac.send_goal(goal)
@@ -389,11 +422,35 @@ class ObjectManipulationAS:
         rospy.loginfo("Closest id is: " + str(closest_id) + " at " + str(closest_pose))
         return closest_id, (closest_object_points, closest_bbox_dims, closest_bbox_dims, closest_pose)
 
+    def get_pose_of_closest_table(self, input_pose):
+        """Get the PoseStamped and the Table msg of the closest table to adjust height of the placing"""
+        closest_table_posestamped = None
+        closest_tablemsg = None
+        closest_distance = 99999.9
+        self.last_tables = TableArray()
+        for mytable in self.last_tables.tables:
+            mytable = Table()
+            table_posestamped = PoseStamped(header=mytable.header, pose=mytable.pose)
+            if table_posestamped.header.frame_id != "base_link":
+                self.tf_listener.waitForTransform("base_link", table_posestamped.header.frame_id, table_posestamped.header.stamp, rospy.Duration(5))
+                table_pose = self.tf_listener.transformPose("base_link", table_posestamped)
+            else:
+                table_pose = table_posestamped
+            if closest_table_posestamped == None:
+                closest_table = table_pose
+            else:
+                if dist_between_poses(table_pose, input_pose) < closest_distance:
+                    closest_distance = dist_between_poses(table_pose, input_pose)
+                    closest_table_posestamped = table_pose
+                    closest_tablemsg = mytable
+        rospy.loginfo("Closest table is at pose: " + str(closest_table))
+        return closest_tablemsg, closest_table_posestamped
+
     def wait_for_recognized_array(self, wait_time=6, timeout_time=10):
         """Ask for depth images until we get a recognized array
-        wait for wait_time between depth throtle calls
+        wait for wait_time between depth throttle calls
         stop if timeout_time is achieved
-        If we dont find it in the correspondent time return false, true otherwise"""
+        If we don't find it in the correspondent time return false, true otherwise"""
         initial_time = rospy.Time.now()
         self.last_clusters = None
         count = 0
@@ -408,8 +465,33 @@ class ObjectManipulationAS:
             if count >= wait_time / 10:
                 self.depth_service.call(EmptyRequest())
                 num_calls += 1
-                rospy.loginfo("Depth throtle server call #" + str(num_calls))
+                rospy.loginfo("Depth throttle server call #" + str(num_calls))
         if self.last_clusters == None:
+            return False
+        else:
+            return True
+
+    def wait_for_table_array(self, wait_time=6, timeout_time=10):
+        """Ask for depth images until we get a table array
+        wait for wait_time between depth throttle calls
+        stop if timeout_time is achieved
+        If we don't find it in the correspondent time return false, true otherwise"""
+        initial_time = rospy.Time.now()
+        self.last_tables = None
+        count = 0
+        num_calls = 1
+        self.depth_service.call(EmptyRequest())
+        rospy.loginfo("Depth throtle server call #" + str(num_calls))
+        rospy.loginfo("Waiting for a table array...")
+        while rospy.Time.now() - initial_time < rospy.Duration(timeout_time) and self.last_tables == None:
+            rospy.sleep(0.1)
+            count += 1
+
+            if count >= wait_time / 10:
+                self.depth_service.call(EmptyRequest())
+                num_calls += 1
+                rospy.loginfo("Depth throttle server call #" + str(num_calls))
+        if self.last_tables == None:
             return False
         else:
             return True
