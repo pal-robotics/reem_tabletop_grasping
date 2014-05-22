@@ -36,11 +36,17 @@
 import rospy
 import actionlib
 from reem_tabletop_grasping.msg import ObjectManipulationAction, ObjectManipulationGoal, ObjectManipulationResult
+from play_motion_msgs.msg import PlayMotionAction, PlayMotionGoal
 from moveit_msgs.msg import MoveItErrorCodes
 from geometry_msgs.msg import PoseStamped, Pose, Point, Quaternion
 from std_msgs.msg import Header
+from control_msgs.msg import FollowJointTrajectoryGoal, FollowJointTrajectoryAction
+from look_down import createHeadGoal
 
 OBJECT_MANIP_AS = '/object_manipulation_server'
+PLAY_MOTION_AS = '/play_motion'
+HEAD_CONTROLLER_AS = '/head_controller/follow_joint_trajectory'
+
 
 if __name__ == '__main__':
     rospy.init_node("send_pick_and_place_")
@@ -64,6 +70,26 @@ if __name__ == '__main__':
     if not result.error_code.val == MoveItErrorCodes.SUCCESS:
         rospy.logerr("Not executing place as pick failed")
         exit()
+
+
+    rospy.loginfo("Opening arms")
+    play_motion_as = actionlib.SimpleActionClient(PLAY_MOTION_AS, PlayMotionAction)
+    play_motion_as.wait_for_server()
+    pm_goal = PlayMotionGoal()
+    pm_goal.motion_name = "arms_t"
+    play_motion_as.send_goal(pm_goal)
+    play_motion_as.wait_for_result()
+
+    rospy.loginfo("Looking down again.")
+    head_as = actionlib.SimpleActionClient(HEAD_CONTROLLER_AS, FollowJointTrajectoryAction)
+    rospy.loginfo("Connecting to head AS...")
+    head_as.wait_for_server()
+    rospy.sleep(1.0)
+    rospy.loginfo("Connected, sending goal.")
+    goal = createHeadGoal(-0.3, 1.0)
+    head_as.send_goal(goal)
+    rospy.loginfo("Goal sent, waiting...")
+    head_as.wait_for_result()
 
     goal = ObjectManipulationGoal()
     goal.group = "right_arm_torso"

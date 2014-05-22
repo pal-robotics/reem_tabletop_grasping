@@ -69,7 +69,7 @@ GRASP_GENERATOR_AS = '/moveit_simple_grasps_server/generate'
 DEPTH_THROTLE_SRV = '/depth_throtle'
 OBJECT_MANIPULATION_AS = 'object_manipulation_server'
 
-OFFSET_OVER_TABLE_PLACING = 0.03
+OFFSET_OVER_TABLE_PLACING = 0.08
 
 
 class ObjectManipulationAS:
@@ -312,7 +312,10 @@ class ObjectManipulationAS:
             # Compute best position, which is adjusting height of the placing pose
             # free space should be checked, how can we do this?
             placing_pose = PoseStamped(header=Header(frame_id="base_link"), pose=object_to_place_pose)
+            rospy.loginfo("Got closest_table_posestamped: " + str(closest_table_posestamped))
+            rospy.loginfo("and placing pose is: " + str(placing_pose))
             placing_pose.pose.position.z = closest_table_posestamped.pose.position.z + OFFSET_OVER_TABLE_PLACING
+            rospy.loginfo("Modified it's z and it's now like: " + str(placing_pose))
 
             # Send place
             self.update_feedback("Sending place order to MoveIt!")
@@ -428,7 +431,7 @@ class ObjectManipulationAS:
         """Get the PoseStamped and the Table msg of the closest table to adjust height of the placing"""
         closest_table_posestamped = None
         closest_tablemsg = None
-        closest_distance = 99999.9
+        closest_distance_z = 99999.9
         for mytable in self.last_tables.tables:
             table_posestamped = PoseStamped(header=mytable.header, pose=mytable.pose)
             if table_posestamped.header.frame_id != "base_link":
@@ -438,9 +441,10 @@ class ObjectManipulationAS:
                 table_pose = table_posestamped
             if closest_table_posestamped == None:
                 closest_table_posestamped = table_pose
+                closest_distance_z = abs(table_pose.pose.position.z - input_pose.position.z)
             else:
-                if dist_between_poses(table_pose, input_pose) < closest_distance:
-                    closest_distance = dist_between_poses(table_pose, input_pose)
+                if abs(table_pose.pose.position.z - input_pose.position.z) < closest_distance_z:
+                    closest_distance_z = abs(table_pose.pose.position.z - input_pose.position.z)
                     closest_table_posestamped = table_pose
                     closest_tablemsg = mytable
         rospy.loginfo("Closest table is at pose: " + str(closest_table_posestamped))
