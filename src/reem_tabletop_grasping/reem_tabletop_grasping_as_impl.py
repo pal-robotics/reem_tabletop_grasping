@@ -296,6 +296,8 @@ class ObjectManipulationAS:
             self.update_feedback("Detecting tables")
             if not self.wait_for_tables_array(wait_time=5, timeout_time=10):  # wait until we get tables published
                 self.update_aborted("Failed detecting tables")
+            elif self.last_tables == None:
+                self.update_aborted("No tables detected.")
 
             # Search closest table
             # transform pose to base_link if needed
@@ -427,9 +429,9 @@ class ObjectManipulationAS:
         closest_table_posestamped = None
         closest_tablemsg = None
         closest_distance = 99999.9
-        self.last_tables = TableArray()
+        #self.last_tables = TableArray()
         for mytable in self.last_tables.tables:
-            mytable = Table()
+            #mytable = Table()
             table_posestamped = PoseStamped(header=mytable.header, pose=mytable.pose)
             if table_posestamped.header.frame_id != "base_link":
                 self.tf_listener.waitForTransform("base_link", table_posestamped.header.frame_id, table_posestamped.header.stamp, rospy.Duration(5))
@@ -437,7 +439,7 @@ class ObjectManipulationAS:
             else:
                 table_pose = table_posestamped
             if closest_table_posestamped == None:
-                closest_table = table_pose
+                closest_table_posestamped = table_pose
             else:
                 if dist_between_poses(table_pose, input_pose) < closest_distance:
                     closest_distance = dist_between_poses(table_pose, input_pose)
@@ -456,7 +458,7 @@ class ObjectManipulationAS:
         count = 0
         num_calls = 1
         self.depth_service.call(EmptyRequest())
-        rospy.loginfo("Depth throtle server call #" + str(num_calls))
+        rospy.loginfo("Depth throttle server call #" + str(num_calls))
         rospy.loginfo("Waiting for a recognized array...")
         while rospy.Time.now() - initial_time < rospy.Duration(timeout_time) and self.last_clusters == None:
             rospy.sleep(0.1)
@@ -481,9 +483,10 @@ class ObjectManipulationAS:
         count = 0
         num_calls = 1
         self.depth_service.call(EmptyRequest())
-        rospy.loginfo("Depth throtle server call #" + str(num_calls))
+        rospy.loginfo("Depth throttle server call #" + str(num_calls))
         rospy.loginfo("Waiting for a table array...")
         while rospy.Time.now() - initial_time < rospy.Duration(timeout_time) and self.last_tables == None:
+            print "self.last_tables is: " + str(self.last_tables)
             rospy.sleep(0.1)
             count += 1
 
