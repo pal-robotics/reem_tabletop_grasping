@@ -471,7 +471,7 @@ class ObjectManipulationAS:
         else:
             return True
 
-    def wait_for_table_array(self, wait_time=6, timeout_time=10):
+    def wait_for_tables_array(self, wait_time=6, timeout_time=10):
         """Ask for depth images until we get a table array
         wait for wait_time between depth throttle calls
         stop if timeout_time is achieved
