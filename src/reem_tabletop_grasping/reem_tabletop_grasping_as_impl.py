@@ -45,7 +45,7 @@ from std_srvs.srv import Empty, EmptyRequest
 from reem_tabletop_grasping.msg import ObjectManipulationAction, ObjectManipulationFeedback, ObjectManipulationActionResult, ObjectManipulationGoal, ObjectManipulationResult
 
 # perception imports & grasp planning imports
-from object_recognition_msgs.msg import RecognizedObjectArray, TableArray, Table
+from object_recognition_msgs.msg import RecognizedObjectArray, TableArray
 from object_recognition_clusters import ClusterBoundingBoxFinder
 from moveit_simple_grasps.msg import GenerateGraspsAction, GenerateGraspsGoal, GraspGeneratorOptions
 # manipulation imports
@@ -54,7 +54,6 @@ from moveit_commander import PlanningSceneInterface
 
 from helper_functions import createPickupGoal, dist_between_poses, createPlaceGoal, moveit_error_dict
 from moveit_msgs.msg._MoveItErrorCodes import MoveItErrorCodes
-import copy
 
 # TODO: dynamic param to setup debug info
 DEBUG_MODE = True
@@ -62,7 +61,7 @@ if DEBUG_MODE:
     from visualizing_functions import publish_grasps_as_poses
 
 RECOGNIZED_OBJECT_ARRAY_TOPIC = '/recognized_object_array'
-TABLES_ARRAY_TOPIC = '/tables_array'
+TABLES_ARRAY_TOPIC = '/table_array'
 TO_BE_GRASPED_OBJECT_POSE_TOPIC = '/to_grasp_object_pose'
 PICKUP_AS = '/pickup'
 PLACE_AS = '/place'
@@ -130,11 +129,11 @@ class ObjectManipulationAS:
 
     def objects_callback(self, data):
         rospy.loginfo(rospy.get_name() + ": This message contains %d objects." % len(data.objects))
-        self.last_clusters = copy.deepcopy(data)
+        self.last_clusters = data
 
     def tables_callback(self, data_tables):
         rospy.loginfo(rospy.get_name() + ": This message contains %d tables." % len(data_tables.tables))
-        self.last_tables = copy.deepcopy(data_tables)
+        self.last_tables = data_tables
 
     def goal_callback(self, goal):
         if self.current_goal:
@@ -430,9 +429,7 @@ class ObjectManipulationAS:
         closest_table_posestamped = None
         closest_tablemsg = None
         closest_distance = 99999.9
-        #self.last_tables = TableArray()
         for mytable in self.last_tables.tables:
-            #mytable = Table()
             table_posestamped = PoseStamped(header=mytable.header, pose=mytable.pose)
             if table_posestamped.header.frame_id != "base_link":
                 self.tf_listener.waitForTransform("base_link", table_posestamped.header.frame_id, table_posestamped.header.stamp, rospy.Duration(5))
