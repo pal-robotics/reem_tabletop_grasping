@@ -443,7 +443,7 @@ class ObjectManipulationAS:
                     closest_distance = dist_between_poses(table_pose, input_pose)
                     closest_table_posestamped = table_pose
                     closest_tablemsg = mytable
-        rospy.loginfo("Closest table is at pose: " + str(closest_table))
+        rospy.loginfo("Closest table is at pose: " + str(closest_table_posestamped))
         return closest_tablemsg, closest_table_posestamped
 
     def wait_for_recognized_array(self, wait_time=6, timeout_time=10):
