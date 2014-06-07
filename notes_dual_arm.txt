@@ -1,0 +1,50 @@
+0.63 rad torso 2 --> frame_id: base_link
+pose: 
+  position: 
+    x: 0.229266321561
+    y: -0.027456663026
+    z: 0.841110325743
+  orientation: 
+    x: 0.0198524586072
+    y: 0.159029310033
+    z: 0.123099189831
+    w: 0.979368239173
+
+0.53 rad torso 2 ->  frame_id: base_link
+pose: 
+  position: 
+    x: 0.246666158854
+    y: -0.0274065311363
+    z: 0.872124227778
+  orientation: 
+    x: 0.0147777068899
+    y: 0.118895278606
+    z: 0.123916152638
+    w: 0.985033156406
+
+0.23 rad torso 2 ->  frame_id: base_link
+pose: 
+  position: 
+    x: 0.288093348188
+    y: -0.0272290135949
+    z: 0.997868878474
+  orientation: 
+    x: -0.00438977660829
+    y: -0.0323517659062
+    z: 0.125081541806
+    w: 0.991609147297
+
+0.00 rad torso 2 ->  frame_id: base_link
+pose: 
+  position: 
+    x: 0.292931858544
+    y: -0.0270273841775
+    z: 1.10034652249
+  orientation: 
+    x: -0.0191898786327
+    y: -0.149176692859
+    z: 0.12399953983
+    w: 0.980817096602
+
+
+Orientations aren't good like this (when going up at least)

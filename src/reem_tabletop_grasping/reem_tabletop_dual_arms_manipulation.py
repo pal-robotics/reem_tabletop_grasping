@@ -57,6 +57,8 @@ from moveit_msgs.msg._MoveItErrorCodes import MoveItErrorCodes
 from play_motion_msgs.msg import PlayMotionAction
 from moveit_msgs.srv import ExecuteKnownTrajectory, GetCartesianPath
 
+#from cartesian_goals import trajectoryConstructor
+
 # TODO: dynamic param to setup debug info
 DEBUG_MODE = True
 if DEBUG_MODE:
@@ -173,11 +175,10 @@ class ObjectManipulationAS:
         if self.message_fields_ok():
             self.as_result = ObjectManipulationResult()
             goal_message_field = self.current_goal.get_goal()
-            # Bend the torso (if it was not bent before)
-            ## play motion bend torso
-            bend_goal = createPlayMotionGoal("bend")
-            self.play_motion_ac.send_goal_and_wait(bend_goal)
+            # Bend the torso
+            # As much as needed (we know we detected an object, so we adapt the bending to the height)
             
+           
             # Get the objects on the table
             ## Publish pose of goal position
             if DEBUG_MODE:
@@ -210,7 +211,7 @@ class ObjectManipulationAS:
             
             # Do a cartesian path with right arm to the bounding box... plus a little more to push
             
-            # Do a cartesian path with both arms up (maybe unbend the torso first?)
+            # unbend torso
             
             # We are done, maybe put a safer position or something
             
