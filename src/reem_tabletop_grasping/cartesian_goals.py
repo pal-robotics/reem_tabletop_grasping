@@ -115,15 +115,15 @@ class trajectoryConstructor():
         time_step = time / float(len(poselist))
         #fjt_goal = FollowJointTrajectoryGoal()
         robot_traj = RobotTrajectory()
-        prev_positions = []
+        #prev_positions = []
         if arm == 'right_arm':
             robot_traj.joint_trajectory.joint_names = self.right_group.get_joints()
             robot_traj.joint_trajectory.joint_names.remove('hand_right_grasping_frame_joint')
-            prev_positions = self.right_group.get_current_joint_values()
+            #prev_positions = self.right_group.get_current_joint_values()
         elif arm == 'left_arm':
             robot_traj.joint_trajectory.joint_names = self.left_arm.get_joints()
             robot_traj.joint_trajectory.joint_names.remove('hand_left_grasping_frame_joint')
-            prev_positions = self.left_group.get_current_joint_values()
+            #prev_positions = self.left_group.get_current_joint_values()
         # TODO: GENERALIZE
         
         ik_answer = None
@@ -144,8 +144,9 @@ class trajectoryConstructor():
                 # sort positions and add only the ones of the joints we are interested in
                 positions = self.sortOutJointList(robot_traj.joint_trajectory.joint_names, ik_answer.solution.joint_state)
                 jtp.positions = positions
-                jtp.velocities = self.computeVelocities(prev_positions, jtp.positions, time_step)
-                prev_positions = jtp.positions
+                #jtp.velocities = self.computeVelocities(prev_positions, jtp.positions, time_step)
+                jtp.velocities = self.dummyVelocities(jtp.positions) # all 0.0 controller will do it's job, hopefully
+                #prev_positions = jtp.positions
                 jtp.time_from_start = rospy.Duration(num_pose * time_step)
                 # TODO: add velocities | WILL BE DONE OUTSIDE
                 # TODO: add acc? | DUNNO
@@ -171,9 +172,16 @@ class trajectoryConstructor():
         calculate the velocity to achieve them"""
         velocities = []
         for prev, now in zip(positions_prev, positions_now):
+            print "Prev pos: " + str(prev) + " New pos: " + str(now) + " in " + str(timestep) + " s = " + str(now - prev / float(timestep)) + " rad/s"
             velocities.append(now - prev / float(timestep))
         return velocities
         
+    def dummyVelocities(self, positions):
+        """Put 0 velocities everywhere"""
+        vels = []
+        for pos in positions:
+            vels.append(0.0)
+        return vels
            
     def sortOutJointList(self, joint_name_list, joint_state):
         """ Get only the joints we are interested in and it's values and return it in
@@ -293,19 +301,19 @@ class trajectoryConstructor():
         self.markers_id += 1
         return marker
 
-if __name__ == '__main__':
-    plan = pickle.load(open("plan_with_ori.p", "rb"))
-    print plan
-    rospy.init_node("calc_traj")
-    t = trajectoryConstructor()
-    trajectory_goal = t.computeJointTrajFromCartesian(plan.plan.points, "right_arm")
-    # compute speeds and times... which is just to divide by the total time, or something like that
-    t.adaptTimesAndVelocitiesOfMsg(trajectory_goal, plan, 7.0)
-    #print trajectory_goal
-    #t.publish_markers()
-    rospy.loginfo("Times and vels set, sending to controller!")
-    from controller_sender import jointControllerSender
-    j = jointControllerSender()
-    j.sendGoal(trajectory_goal, 'right_arm') 
-    
+# if __name__ == '__main__':
+#     plan = pickle.load(open("plan_with_ori.p", "rb"))
+#     print plan
+#     rospy.init_node("calc_traj")
+#     t = trajectoryConstructor()
+#     trajectory_goal = t.computeJointTrajFromCartesian(plan.plan.points, "right_arm")
+#     # compute speeds and times... which is just to divide by the total time, or something like that
+#     t.adaptTimesAndVelocitiesOfMsg(trajectory_goal, plan, 7.0)
+#     #print trajectory_goal
+#     #t.publish_markers()
+#     rospy.loginfo("Times and vels set, sending to controller!")
+#     from controller_sender import jointControllerSender
+#     j = jointControllerSender()
+#     j.sendGoal(trajectory_goal, 'right_arm') 
+#     
     

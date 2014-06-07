@@ -13,9 +13,10 @@ import copy
 import rospy
 import moveit_commander
 import tf
-
+from moveit_msgs.srv import ExecuteKnownTrajectory, ExecuteKnownTrajectoryRequest
 # My stuff
 from cartesian_goals import trajectoryConstructor
+
 
 if __name__ == '__main__':
     rospy.init_node("Testing_generating_cartesian")
@@ -54,9 +55,22 @@ if __name__ == '__main__':
     poselist = tC.createCartesianPoseList(first_pose, second_pose, 0.01)
     print "Got this poselist:"
     print poselist
-    robot_traj = tC.computeIKsPose(poselist, "right_arm", 5.0)
+    robot_traj = tC.computeIKsPose(poselist, "right_arm", 7.0)
     print "Got this robot_traj:"
     print robot_traj
     
+    print "lets execute it then"
+    
+    ekp = rospy.ServiceProxy('/execute_kinematic_path', ExecuteKnownTrajectory)
+    ekp.wait_for_service()
+     
+    print "connected to execute_kinematic_path"
+    #rospy.sleep(3)
+    ektr = ExecuteKnownTrajectoryRequest()
+    ektr.trajectory = robot_traj
+    ektr.wait_for_execution = True
+    print "Sending call "
+    ekp.call(ektr)
+    print "!!!! Call done"
     while not rospy.is_shutdown():
         rospy.sleep(0.5)
