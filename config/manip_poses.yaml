@@ -1,0 +1,78 @@
+play_motion:
+  motions:
+    grasp_1:
+      joints: ['torso_1_joint', 'torso_2_joint',
+              'arm_right_1_joint', 'arm_right_2_joint', 'arm_right_3_joint',
+              'arm_right_4_joint', 'arm_right_5_joint', 'arm_right_6_joint',
+              'arm_right_7_joint',
+              'arm_left_1_joint', 'arm_left_2_joint', 'arm_left_3_joint',
+              'arm_left_4_joint', 'arm_left_5_joint', 'arm_left_6_joint',
+              'arm_left_7_joint']
+      points:
+      - positions: [0.0, 0.5,
+              0.904186234366, 0.0384229614136, -1.28266429768,
+              0.804876373305, 0.132163508053, 0.886241414735,
+              0.687621553401,
+              0.904186234366, 0.0384229614136, -1.28266429768,
+              0.804876373305, 0.132163508053, 0.886241414735,
+              0.687621553401 ]
+        time_from_start: 0.0
+      meta:
+        name: grasp_1
+        usage: posture
+        description: Both arms in front with torso bent open arms.
+
+    bend:
+      joints: ['torso_1_joint', 'torso_2_joint']
+      points:
+      - positions: [0.0, 0.5]
+        time_from_start: 0.0
+      meta:
+        name: bend
+        usage: posture
+        description: Bend the robot
+
+    # grasp_2:
+    #   joints: ['torso_1_joint', 'torso_2_joint',
+    #           'arm_right_1_joint', 'arm_right_2_joint', 'arm_right_3_joint',
+    #           'arm_right_4_joint', 'arm_right_5_joint', 'arm_right_6_joint',
+    #           'arm_right_7_joint',
+    #           'arm_left_1_joint', 'arm_left_2_joint', 'arm_left_3_joint',
+    #           'arm_left_4_joint', 'arm_left_5_joint', 'arm_left_6_joint',
+    #           'arm_left_7_joint']
+    #   points:
+    #   - positions: [0.0, 0.5,
+    #           0.904186234366, 0.0384229614136, -1.28266429768,
+    #           0.804876373305, 0.132163508053, 0.886241414735,
+    #           0.687621553401,
+    #           0.904186234366, 0.0384229614136, -1.28266429768,
+    #           0.804876373305, 0.132163508053, 0.886241414735,
+    #           0.687621553401 ]
+    #     time_from_start: 0.0
+    #   meta:
+    #     name: grasp_2
+    #     usage: posture
+    #     description: Both arms in front with torso bent one arm closer.
+
+
+    # grasp_3:
+    #   joints: ['torso_1_joint', 'torso_2_joint',
+    #           'arm_right_1_joint', 'arm_right_2_joint', 'arm_right_3_joint',
+    #           'arm_right_4_joint', 'arm_right_5_joint', 'arm_right_6_joint',
+    #           'arm_right_7_joint',
+    #           'arm_left_1_joint', 'arm_left_2_joint', 'arm_left_3_joint',
+    #           'arm_left_4_joint', 'arm_left_5_joint', 'arm_left_6_joint',
+    #           'arm_left_7_joint']
+    #   points:
+    #   - positions: [0.0, 0.5,
+    #           0.904186234366, 0.0384229614136, -1.28266429768,
+    #           0.804876373305, 0.132163508053, 0.886241414735,
+    #           0.687621553401,
+    #           0.904186234366, 0.0384229614136, -1.28266429768,
+    #           0.804876373305, 0.132163508053, 0.886241414735,
+    #           0.687621553401 ]
+    #     time_from_start: 0.0
+    #   meta:
+    #     name: grasp_3
+    #     usage: posture
+    #     description: Both arms in front with torso bent two arms close.

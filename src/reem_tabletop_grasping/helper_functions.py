@@ -41,11 +41,15 @@ import rospy
 from geometry_msgs.msg import Pose, PoseStamped, PoseArray, Vector3Stamped, Vector3, Quaternion, Point
 from trajectory_msgs.msg import JointTrajectoryPoint, JointTrajectory
 from std_msgs.msg import Header
-from moveit_msgs.msg import GripperTranslation, MoveItErrorCodes
+from moveit_msgs.msg import GripperTranslation, MoveItErrorCodes, Constraints
 from moveit_msgs.msg import PickupGoal, PlaceAction, PlaceGoal, PlaceResult, PlaceLocation
+from moveit_msgs.srv import GetCartesianPath, GetCartesianPathRequest, GetCartesianPathResponse
+from moveit_msgs.srv import ExecuteKnownTrajectory, ExecuteKnownTrajectoryRequest, ExecuteKnownTrajectoryResponse
+from play_motion_msgs.msg import PlayMotionGoal
 # System stuff
 import numpy as np
 from math import radians, pi, sqrt
+import copy
 
 # Useful dict for getting the string of an error code
 moveit_error_dict = {}
@@ -153,3 +157,33 @@ def dist_between_poses(pose1, pose2):
 
     dist = np.linalg.norm(p1 - p2, ord=3)
     return dist
+
+def createCartesianPathRequest(frame_id, group_name, waypoints, max_step=0.01, jump_threshold=0.0, avoid_collisions=True, path_constraints=Constraints()):
+    """Create a GetCartesianPathRequest with the specified data"""
+    gcpr = GetCartesianPathRequest()
+    gcpr.header.frame_id = frame_id
+    gcpr.group_name = group_name
+    gcpr.max_step = max_step
+    gcpr.jump_threshold = jump_threshold
+    gcpr.avoid_collisions = avoid_collisions
+    gcpr.waypoints = copy.deepcopy(waypoints)
+    gcpr.path_constraints = path_constraints
+    return gcpr
+    
+def createExecuteKnownTrajectoryRequest(trajectory, wait_for_execution=True):
+    """Create a ExecuteKnownTrajectoryRequest from the given data,
+    trajectory must be a RobotTrajectory probably filled from a GetCartesianPath call"""
+    ektr = ExecuteKnownTrajectoryRequest()
+    ektr.trajectory = trajectory
+    ektr.wait_for_execution = wait_for_execution
+    return ektr
+    
+def createPlayMotionGoal(motion_name, priority=1, skip_planning=False):
+    """Create a PlayMotionGoal with given data"""
+    pmg = PlayMotionGoal()
+    pmg.motion_name = motion_name
+    pmg.priority = priority
+    pmg.skip_planning = skip_planning
+    return pmg
+
+
