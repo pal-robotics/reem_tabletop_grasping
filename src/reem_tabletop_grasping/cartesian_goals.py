@@ -145,8 +145,8 @@ class trajectoryConstructor():
                 positions = self.sortOutJointList(robot_traj.joint_trajectory.joint_names, ik_answer.solution.joint_state)
                 jtp.positions = positions
                 #jtp.velocities = self.computeVelocities(prev_positions, jtp.positions, time_step)
-                #jtp.velocities = self.dummyVelocities(jtp.positions) # all 0.0 controller will do it's job, hopefully
-                jtp.velocities = self.setVelocities(jtp.positions, num_pose, len(poselist))
+                jtp.velocities = self.dummyVelocities(jtp.positions) # all 0.0 controller will do it's job, hopefully
+                #jtp.velocities = self.setVelocities(jtp.positions, num_pose, len(poselist))
                 #prev_positions = jtp.positions
                 jtp.time_from_start = rospy.Duration(num_pose * time_step)
                 # TODO: add velocities | WILL BE DONE OUTSIDE
@@ -189,15 +189,21 @@ class trajectoryConstructor():
         taking into account it will be divided in accel, static and deceel fases"""
         vels = []
         max_speed = 0.5 # rad/s
-        if num_point / total_points < 1/3: # accel phase
+        if num_point / float(total_points) < 1/3.0: # accel phase
+            print str(num_point) + "/" + str(total_points) + "=" + str(num_point / total_points)
+            print "Appending: max_speed * (num_point / (total_points / 3)): " + str(max_speed * (num_point / (total_points / 3.0)))
             for pos in positions:
-                vels.append(max_speed * num_point / (total_points / 3))
-        elif 2/3 <= num_point / total_points >= 1/3: # static vel
+                vels.append(max_speed * (num_point / (total_points / 3.0)))
+        elif 2/3 <= num_point / float(total_points) >= 1/3.0: # static vel
+            print str(num_point) + "/" + str(total_points)
+            print "Appending: max_speed: " + str(max_speed)
             for pos in positions:
                 vels.append(max_speed)
         else: # decel phase
+            print str(num_point) + "/" + str(total_points)
+            print "Appending: max_speed - (max_speed * num_point / (2 * total_points / 3)): " + str(max_speed - (max_speed * num_point / (2 * total_points / 3.0)))
             for pos in positions: 
-                vels.append(max_speed - (max_speed * num_point / (total_points / 3)))
+                vels.append(max_speed - (max_speed * num_point / (2.0 * total_points / 3.0)))
                 
         return vels
            

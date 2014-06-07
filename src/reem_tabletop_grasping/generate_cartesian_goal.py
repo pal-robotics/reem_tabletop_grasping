@@ -52,7 +52,7 @@ if __name__ == '__main__':
     second_pose.position.z += 0.3
     print second_pose
     # Poses in base_link
-    poselist = tC.createCartesianPoseList(first_pose, second_pose, 0.01)
+    poselist = tC.createCartesianPoseList(first_pose, second_pose, 0.001)
     print "Got this poselist:"
     print poselist
     robot_traj = tC.computeIKsPose(poselist, "right_arm", 7.0)
