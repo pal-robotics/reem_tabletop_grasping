@@ -46,7 +46,6 @@ if __name__ == '__main__':
 
     rospy.loginfo("Transformed pose:\n" + str(base_link_hand_pose))
     
-    exit(0)
     first_pose = base_link_hand_pose.pose
     print first_pose
     second_pose = copy.deepcopy(first_pose)

@@ -1,0 +1,27 @@
+<launch>
+
+  <!-- Launch REEM simulation with xtion model and objects on table world -->
+   <include file="$(find reem_gazebo)/launch/reem_gazebo.launch" >
+      <arg name="world" value="objects_on_table" />
+      <arg name="robot" value="rgbd" />
+   </include>
+
+  <!-- Launch tabletop grasping servers -->
+   <include file="$(find reem_tabletop_grasping)/launch/tabletop_grasping_dual_arms.launch" >
+   </include>
+
+   <!-- Launch setup world stuff -->
+   <!-- Move head looking down to table -->
+   <!-- <node name="move_reem_head_down" pkg="reem_tabletop_grasping" type="look_down.py"/> -->
+
+   <!-- Open both hands to ease plans from starting position -->
+   <node name="open_reem_hands" pkg="reem_tabletop_grasping" type="open_hands.py"/>
+
+   <!-- Reduce simulation pointcloud publishing rate -->
+    <include file="$(find reem_rgbd_launch)/launch/simulation_reduce_rate.launch" >
+   </include>
+
+   <!-- Launch Rviz with some useful debugging config -->
+   <node name="reem_tabletop_grasping_rviz" pkg="rviz" type="rviz" args="-d $(find reem_tabletop_grasping)/rviz/tabletop_new_all.rviz" />
+
+</launch>

@@ -46,6 +46,10 @@ from moveit_msgs.msg import PickupGoal, PlaceAction, PlaceGoal, PlaceResult, Pla
 from moveit_msgs.srv import GetCartesianPath, GetCartesianPathRequest, GetCartesianPathResponse
 from moveit_msgs.srv import ExecuteKnownTrajectory, ExecuteKnownTrajectoryRequest, ExecuteKnownTrajectoryResponse
 from play_motion_msgs.msg import PlayMotionGoal
+from control_msgs.msg import FollowJointTrajectoryGoal, FollowJointTrajectoryAction, FollowJointTrajectoryResult, JointTolerance
+from trajectory_msgs.msg import JointTrajectoryPoint 
+from moveit_msgs.msg import MoveGroupGoal, MoveGroupResult, MoveGroupAction, Constraints, PositionConstraint, OrientationConstraint, MoveItErrorCodes
+from shape_msgs.msg import SolidPrimitive
 # System stuff
 import numpy as np
 from math import radians, pi, sqrt
@@ -185,5 +189,95 @@ def createPlayMotionGoal(motion_name, priority=1, skip_planning=False):
     pmg.priority = priority
     pmg.skip_planning = skip_planning
     return pmg
+
+def createTorsoGoal(j1, j2):
+    """Creates a FollowJointTrajectoryGoal with the values specified in j1 and j2 for the joint positions
+    @arg j1 float value for head_1_joint
+    @arg j2 float value for head_2_joint
+    @returns FollowJointTrajectoryGoal with the specified goal"""
+    fjtg = FollowJointTrajectoryGoal()
+    fjtg.trajectory.joint_names.append('torso_1_joint')
+    fjtg.trajectory.joint_names.append('torso_2_joint')
+    point = JointTrajectoryPoint()
+    point.positions.append(j1)
+    point.positions.append(j2)
+    point.velocities.append(0.0)
+    point.velocities.append(0.0)
+    point.time_from_start = rospy.Duration(4.0)
+    for joint in fjtg.trajectory.joint_names:  # Specifying high tolerances
+        goal_tol = JointTolerance()
+        goal_tol.name = joint
+        goal_tol.position = 5.0
+        goal_tol.velocity = 5.0
+        goal_tol.acceleration = 5.0
+        fjtg.goal_tolerance.append(goal_tol)
+    fjtg.goal_time_tolerance = rospy.Duration(3)
+
+    fjtg.trajectory.points.append(point)
+    fjtg.trajectory.header.stamp = rospy.Time.now()
+    return fjtg
+
+def createBendGoal(height):
+    """Create a FollowJointTrajectoryGoal with """
+    # calculate rads torso 2 by height
+    # there is a relation like 0.00 rad == 1.10m
+    #                          0.23 rad == 0.99m
+    #                          0.63 rad == 1.84m
+    # We can figure this out as linear
+    # TODO: Change this to be able to pick up things from higher than 1.10
+    # for now this is just a test proof of concept
+    if height > 1.10:
+        print "HEIGHT HIGHER THAN 1.10, NOT POSSIBLE ATM!"
+    height_diff = 1.10 - 0.84
+    given_height = 1.10 - height
+    max_torso_rads = 0.63
+    torso_rads = 0.63 * given_height / float(height_diff)
+    goal = createTorsoGoal(0.0, torso_rads)
+    return goal
+    
+    
+    
+def create_move_group_pose_goal(goal_pose=Pose(), group="right_arm_torso", end_link_name=None, plan_only=True):
+    """ Creates a move_group goal based on pose.
+    @arg group string representing the move_group group to use
+    @arg end_link_name string representing the ending link to use
+    @arg goal_pose Pose() representing the goal pose
+    @arg plan_only bool to for only planning or planning and executing
+    @returns MoveGroupGoal with the data given on the arguments"""
+    
+    header = Header()
+    header.frame_id = 'base_link'
+    header.stamp = rospy.Time.now()
+    # We are filling in the MoveGroupGoal a MotionPlanRequest and a PlanningOptions message
+    # http://docs.ros.org/hydro/api/moveit_msgs/html/msg/MotionPlanRequest.html
+    # http://docs.ros.org/hydro/api/moveit_msgs/html/msg/PlanningOptions.html
+    moveit_goal = MoveGroupGoal()
+    goal_c = Constraints()
+    position_c = PositionConstraint()
+    position_c.header = header
+    if end_link_name != None: # For some groups the end_link_name can be deduced, but better add it manually
+        position_c.link_name = end_link_name
+    position_c.constraint_region.primitives.append(SolidPrimitive(type=SolidPrimitive.SPHERE, dimensions=[0.01])) # how big is the area where the end effector can be
+    position_c.constraint_region.primitive_poses.append(goal_pose)
+    position_c.weight = 1.0
+    goal_c.position_constraints.append(position_c)
+    orientation_c = OrientationConstraint()
+    orientation_c.header = header
+    if end_link_name != None:
+        orientation_c.link_name = end_link_name
+    orientation_c.orientation = goal_pose.orientation
+    orientation_c.absolute_x_axis_tolerance = 0.01 # Tolerances, MoveIt! by default uses 0.001 which may be too low sometimes
+    orientation_c.absolute_y_axis_tolerance = 0.01
+    orientation_c.absolute_z_axis_tolerance = 0.01
+    orientation_c.weight = 1.0
+    goal_c.orientation_constraints.append(orientation_c)
+    moveit_goal.request.goal_constraints.append(goal_c)
+    moveit_goal.request.num_planning_attempts = 1 # The number of times this plan is to be computed. Shortest solution will be reported.
+    moveit_goal.request.allowed_planning_time = 5.0
+    moveit_goal.planning_options.plan_only = plan_only
+    moveit_goal.planning_options.planning_scene_diff.is_diff = True # Necessary
+    moveit_goal.request.group_name = group
+    
+    return moveit_goal
 
 

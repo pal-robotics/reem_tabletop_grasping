@@ -34,15 +34,18 @@
 # author: Bence Magyar
 # author: Sammy Pfeiffer
 
+import copy
 # ROS imports
 import rospy
 import tf
 from actionlib import ActionServer, SimpleActionClient
-from geometry_msgs.msg import PoseArray, Pose, Point, PoseStamped
+from geometry_msgs.msg import PoseArray, Pose, Point, PoseStamped, Quaternion
 from std_msgs.msg import Header
 from std_srvs.srv import Empty, EmptyRequest
 # own imports
-from reem_tabletop_grasping.msg import ObjectManipulationAction, ObjectManipulationFeedback, ObjectManipulationActionResult, ObjectManipulationGoal, ObjectManipulationResult
+from reem_tabletop_grasping.msg import ObjectManipulationAction, ObjectManipulationFeedback, \
+                                        ObjectManipulationActionResult, ObjectManipulationGoal, \
+                                        ObjectManipulationResult
 
 # perception imports & grasp planning imports
 from object_recognition_msgs.msg import RecognizedObjectArray, TableArray
@@ -52,10 +55,14 @@ from moveit_simple_grasps.msg import GenerateGraspsAction, GenerateGraspsGoal, G
 from moveit_msgs.msg import PickupAction, PlaceAction
 from moveit_commander import PlanningSceneInterface
 
-from helper_functions import createPickupGoal, dist_between_poses, createPlaceGoal, moveit_error_dict, createCartesianPathRequest, createPlayMotionGoal, createExecuteKnownTrajectoryRequest
+from helper_functions import createPickupGoal, dist_between_poses, createPlaceGoal, \
+                            moveit_error_dict, createCartesianPathRequest, createPlayMotionGoal, \
+                            createExecuteKnownTrajectoryRequest, createBendGoal, create_move_group_pose_goal
+from control_msgs.msg import FollowJointTrajectoryAction
 from moveit_msgs.msg._MoveItErrorCodes import MoveItErrorCodes
 from play_motion_msgs.msg import PlayMotionAction
 from moveit_msgs.srv import ExecuteKnownTrajectory, GetCartesianPath
+from moveit_msgs.msg._MoveGroupAction import MoveGroupAction
 
 #from cartesian_goals import trajectoryConstructor
 
@@ -75,6 +82,8 @@ OBJECT_MANIPULATION_AS = 'object_manipulation_server'
 PLAY_MOTION_AS = '/play_motion'
 CARTESIAN_PATH_SRV = '/compute_cartesian_path'
 EXECUTE_KNOWN_TRAJ_SRV = '/execute_kinematic_path'
+TORSO_AS = '/torso_controller/follow_joint_trajectory'
+MOVE_GROUP_AS = '/move_group'
 
 OFFSET_OVER_TABLE_PLACING = 0.08
 
@@ -119,6 +128,14 @@ class ObjectManipulationAS:
         rospy.loginfo("Getting a PlanningSceneInterface instance...")
         self.scene = PlanningSceneInterface()
 
+        self.torso_as = SimpleActionClient(TORSO_AS, FollowJointTrajectoryAction)
+        rospy.loginfo("Connecting to torso AS...")
+        self.torso_as.wait_for_server()
+        
+        self.move_group_as = SimpleActionClient(MOVE_GROUP_AS, MoveGroupAction)
+        rospy.loginfo("Connecting to move_group AS...")
+        self.move_group_as.wait_for_server()
+        
         # blocking action server
         rospy.loginfo("Creating Action Server '" + name + "'...")
         self.grasp_obj_as = ActionServer(name, ObjectManipulationAction, self.goal_callback, self.cancel_callback, False)
@@ -177,7 +194,7 @@ class ObjectManipulationAS:
             goal_message_field = self.current_goal.get_goal()
             # Bend the torso
             # As much as needed (we know we detected an object, so we adapt the bending to the height)
-            
+            # 0.63 deg torso 2 (max: 35deg)
            
             # Get the objects on the table
             ## Publish pose of goal position
@@ -202,10 +219,56 @@ class ObjectManipulationAS:
             rospy.logdebug("in AS: Closest cluster id is: " + str(closest_cluster_id))
             #TODO visualize bbox
             #TODO publish filtered pointcloud?
-            rospy.logdebug("BBOX: " + str(obj_bbox_dims))
+            rospy.loginfo("BBOX: " + str(obj_bbox_dims))
             ########
             self.update_feedback("Check reachability")
-            # Given the bounding box... move arms safely to position around this object (note we need a perfect pose here)
+            # Given the bounding box... 
+            # move the torso first
+            
+            # shift object pose up by halfway, clustering code gives obj frame on the bottom because of too much noise on the table cropping (2 1pixel lines behind the objects)
+            # TODO remove this hack, fix it in table filtering
+            object_pose.pose.position.z += obj_bbox_dims[2] / 2.0
+            
+            # TESTING HACK
+            object_pose.pose.position.x = 0.29
+            
+            rospy.loginfo("object_pose is: " + str(object_pose))
+            torso_goal = createBendGoal(object_pose.pose.position.z)
+            self.torso_as.send_goal_and_wait(torso_goal)
+            print self.torso_as.get_result()
+            
+
+            
+            # Add box representing the obstacle
+            self.scene.add_box("object_bbx", object_pose,
+                               (obj_bbox_dims[0], obj_bbox_dims[1], obj_bbox_dims[2]))
+                        
+            # move arms safely to position around this object (note we need a perfect pose here)
+            rospy.loginfo("Creating goal for left arm")
+            goal_left_pose = copy.deepcopy(object_pose)
+            goal_left_pose.pose.position.x -= obj_bbox_dims[0] / 2.0
+            goal_left_pose.pose.position.y += obj_bbox_dims[1] * 2.5
+            goal_left_pose.pose.position.z -= 0.0
+            goal_left_pose.pose.orientation = Quaternion(0.0, 0.0, 0.0, 1.0)
+            rospy.loginfo("Pose: " + str(goal_left_pose))
+            if DEBUG_MODE:
+                pub = rospy.Publisher("/AAA_left_arm_pose", PoseStamped, latch=True)
+                pub.publish(goal_left_pose)
+            goal_left = create_move_group_pose_goal(goal_left_pose.pose, "left_arm", "hand_left_grasping_frame", plan_only=False)
+            self.move_group_as.send_goal_and_wait(goal_left)
+            
+            rospy.loginfo("Creating goal for right arm")
+            goal_right_pose = copy.deepcopy(object_pose)
+            goal_right_pose.pose.position.x -= obj_bbox_dims[0] / 2.0
+            goal_right_pose.pose.position.y -= obj_bbox_dims[1] * 2.5
+            goal_right_pose.pose.position.z -= 0.0
+            goal_right_pose.pose.orientation = Quaternion(0.0, 0.0, 0.0, 1.0)
+            rospy.loginfo("Pose: " + str(goal_right_pose))
+            if DEBUG_MODE:
+                pub = rospy.Publisher("/AAA_right_arm_pose", PoseStamped, latch=True)
+                pub.publish(goal_right_pose)
+            goal_right = create_move_group_pose_goal(goal_right_pose.pose, "right_arm", "hand_right_grasping_frame", plan_only=False)
+            self.move_group_as.send_goal_and_wait(goal_right)
             
             # Do a cartesian path with left arm to the bounding box
             
@@ -215,7 +278,8 @@ class ObjectManipulationAS:
             
             # We are done, maybe put a safer position or something
             
-
+            self.current_goal.set_succeeded(result=self.as_result)
+            
     def place_operation(self):
         """Execute the place operation"""
         if self.message_fields_ok():
