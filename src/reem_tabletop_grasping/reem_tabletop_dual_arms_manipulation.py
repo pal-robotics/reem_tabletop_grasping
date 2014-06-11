@@ -35,6 +35,7 @@
 # author: Sammy Pfeiffer
 
 import copy
+import sys
 # ROS imports
 import rospy
 import tf
@@ -64,7 +65,8 @@ from play_motion_msgs.msg import PlayMotionAction
 from moveit_msgs.srv import ExecuteKnownTrajectory, GetCartesianPath
 from moveit_msgs.msg._MoveGroupAction import MoveGroupAction
 
-#from cartesian_goals import trajectoryConstructor
+import moveit_commander
+from cartesian_goals import trajectoryConstructor
 
 # TODO: dynamic param to setup debug info
 DEBUG_MODE = True
@@ -135,6 +137,15 @@ class ObjectManipulationAS:
         self.move_group_as = SimpleActionClient(MOVE_GROUP_AS, MoveGroupAction)
         rospy.loginfo("Connecting to move_group AS...")
         self.move_group_as.wait_for_server()
+        
+        rospy.loginfo("Creating trajectory constructor...")
+        self.tC = trajectoryConstructor()
+        
+        moveit_commander.roscpp_initialize(sys.argv)
+        self.robot = moveit_commander.RobotCommander()
+        self.scene = moveit_commander.PlanningSceneInterface()
+        self.right_group = moveit_commander.MoveGroupCommander("right_arm")
+        self.left_group = moveit_commander.MoveGroupCommander("left_arm")
         
         # blocking action server
         rospy.loginfo("Creating Action Server '" + name + "'...")
@@ -442,3 +453,37 @@ class ObjectManipulationAS:
             return False
         else:
             return True
+
+    def send_arms_to_initial_pose(self, object_pose, obj_bbox_dims):
+        rospy.loginfo("Creating goal for left arm")
+        goal_left_pose = copy.deepcopy(object_pose)
+        goal_left_pose.pose.position.x -= obj_bbox_dims[0] / 2.0
+        goal_left_pose.pose.position.y += obj_bbox_dims[1] * 2.5
+        goal_left_pose.pose.position.z -= 0.0
+        goal_left_pose.pose.orientation = Quaternion(0.0, 0.0, 0.0, 1.0)
+        rospy.loginfo("Pose: " + str(goal_left_pose))
+        if DEBUG_MODE:
+            pub = rospy.Publisher("/AAA_left_arm_pose", PoseStamped, latch=True)
+            pub.publish(goal_left_pose)
+        goal_left = create_move_group_pose_goal(goal_left_pose.pose, "left_arm", "hand_left_grasping_frame", plan_only=False)
+        self.move_group_as.send_goal_and_wait(goal_left)
+        
+        rospy.loginfo("Creating goal for right arm")
+        goal_right_pose = copy.deepcopy(object_pose)
+        goal_right_pose.pose.position.x -= obj_bbox_dims[0] / 2.0
+        goal_right_pose.pose.position.y -= obj_bbox_dims[1] * 2.5
+        goal_right_pose.pose.position.z -= 0.0
+        goal_right_pose.pose.orientation = Quaternion(0.0, 0.0, 0.0, 1.0)
+        rospy.loginfo("Pose: " + str(goal_right_pose))
+        if DEBUG_MODE:
+            pub = rospy.Publisher("/AAA_right_arm_pose", PoseStamped, latch=True)
+            pub.publish(goal_right_pose)
+        goal_right = create_move_group_pose_goal(goal_right_pose.pose, "right_arm", "hand_right_grasping_frame", plan_only=False)
+        self.move_group_as.send_goal_and_wait(goal_right)
+            
+        
+        return
+    
+    def move_arm_straight_line(self, arm):
+        return
+    
