@@ -1,0 +1,131 @@
+play_motion:
+  motions:
+    pre_grasp:
+      joints: [
+              'arm_right_1_joint', 'arm_right_2_joint', 'arm_right_3_joint',
+              'arm_right_4_joint', 'arm_right_5_joint', 'arm_right_6_joint',
+              'arm_right_7_joint',
+              'arm_left_1_joint', 'arm_left_2_joint', 'arm_left_3_joint',
+              'arm_left_4_joint', 'arm_left_5_joint', 'arm_left_6_joint',
+              'arm_left_7_joint']
+      points:
+      - positions: [
+              0.934186234366, 0.0384229614136, -1.28266429768,
+              0.804876373305, 0.132163508053, 0.886241414735,
+              0.687621553401,
+              0.934186234366, 0.0384229614136, -1.28266429768,
+              0.804876373305, 0.132163508053, 0.886241414735,
+              0.687621553401 ]
+        time_from_start: 0.0
+      meta:
+        name: pre_grasp
+        usage: posture
+        description: Initial pose for dual arms grasping. Arms up and parallel. 34cm between fingers in RH2.
+
+    grasp_24cm:
+      joints: ['arm_right_1_joint', 'arm_right_2_joint', 'arm_right_3_joint',
+              'arm_right_4_joint', 'arm_right_5_joint', 'arm_right_6_joint',
+              'arm_right_7_joint',
+              'arm_left_1_joint', 'arm_left_2_joint', 'arm_left_3_joint',
+              'arm_left_4_joint', 'arm_left_5_joint', 'arm_left_6_joint',
+              'arm_left_7_joint']
+      points:
+      - positions: [
+              1.0131973571, -0.178538838578, -1.63167724752, 0.563939684597, 0.412963038584, 1.01286683109, 0.738035036402,
+              1.0131973571, -0.178538838578, -1.63167724752, 0.563939684597, 0.412963038584, 1.01286683109, 0.738035036402 ]
+        time_from_start: 0.0
+      meta:
+        name: grasp_24cm
+        usage: posture
+        description: Parallel arms with 24cm separation.
+
+    grasp_19cm:
+      joints: ['arm_right_1_joint', 'arm_right_2_joint', 'arm_right_3_joint',
+              'arm_right_4_joint', 'arm_right_5_joint', 'arm_right_6_joint',
+              'arm_right_7_joint',
+              'arm_left_1_joint', 'arm_left_2_joint', 'arm_left_3_joint',
+              'arm_left_4_joint', 'arm_left_5_joint', 'arm_left_6_joint',
+              'arm_left_7_joint']
+      points:
+      - positions: [
+              1.00891742429, -0.223164223022, -1.63030601702, 0.559766966425, 0.41000566117, 1.00997552914, 0.739983381727,
+              1.00999332226, -0.226322168185, -1.62998213182, 0.560016242566, 0.409996530251, 1.00999835643, 0.740051863621 ]
+        time_from_start: 0.0
+      meta:
+        name: grasp_19cm
+        usage: posture
+        description: Parallel arms with 19cm separation.
+
+
+
+    grasp_15cm:
+      joints: ['arm_right_1_joint', 'arm_right_2_joint', 'arm_right_3_joint',
+              'arm_right_4_joint', 'arm_right_5_joint', 'arm_right_6_joint',
+              'arm_right_7_joint',
+              'arm_left_1_joint', 'arm_left_2_joint', 'arm_left_3_joint',
+              'arm_left_4_joint', 'arm_left_5_joint', 'arm_left_6_joint',
+              'arm_left_7_joint']
+      points:
+      - positions: [
+              0.970552055904, -0.216828798333, -1.63030601702, 0.604770897318, 0.409996530251, 1.00997552914, 0.739983381727,
+              0.9711217335, -0.230126491, -1.62998213182, 0.604962648196, 0.409996530251, 1.00999835643, 0.740051863621 ]
+        time_from_start: 0.0
+      meta:
+        name: grasp_15cm
+        usage: posture
+        description: Parallel arms with 15cm separation.
+
+
+
+
+    grasp_10cm:
+      joints: ['arm_right_1_joint', 'arm_right_2_joint', 'arm_right_3_joint',
+              'arm_right_4_joint', 'arm_right_5_joint', 'arm_right_6_joint',
+              'arm_right_7_joint',
+              'arm_left_1_joint', 'arm_left_2_joint', 'arm_left_3_joint',
+              'arm_left_4_joint', 'arm_left_5_joint', 'arm_left_6_joint',
+              'arm_left_7_joint']
+      points:
+      - positions: [
+              0.969340195008, -0.219988840672, -1.63030601702, 0.595029952754, 0.409996530251, 0.890004382841, 0.659950875655,
+              0.969986572659, -0.229988430898, -1.62998213182, 0.617503155568, 0.409987399332, 0.849969867967, 0.660028488468 ]
+        time_from_start: 0.0
+      meta:
+        name: grasp_10cm
+        usage: posture
+        description: Parallel arms with 10cm separation.
+
+    grasp_6cm:
+      joints: ['arm_right_1_joint', 'arm_right_2_joint', 'arm_right_3_joint',
+              'arm_right_4_joint', 'arm_right_5_joint', 'arm_right_6_joint',
+              'arm_right_7_joint',
+              'arm_left_1_joint', 'arm_left_2_joint', 'arm_left_3_joint',
+              'arm_left_4_joint', 'arm_left_5_joint', 'arm_left_6_joint',
+              'arm_left_7_joint']
+      points:
+      - positions: [
+              0.969340195008, -0.219988840672, -1.63030601702, 0.656466933828, 0.409996530251, 0.89001351376, 0.659960006574,
+              0.969986572659, -0.229988430898, -1.62998213182, 0.664942322603, 0.409987399332, 0.818984093939, 0.660023923008 ]
+        time_from_start: 0.0
+      meta:
+        name: grasp_6cm
+        usage: posture
+        description: Parallel arms with 6cm separation.
+
+
+    grasp_3cm:
+      joints: ['arm_right_1_joint', 'arm_right_2_joint', 'arm_right_3_joint',
+              'arm_right_4_joint', 'arm_right_5_joint', 'arm_right_6_joint',
+              'arm_right_7_joint',
+              'arm_left_1_joint', 'arm_left_2_joint', 'arm_left_3_joint',
+              'arm_left_4_joint', 'arm_left_5_joint', 'arm_left_6_joint',
+              'arm_left_7_joint']
+      points:
+      - positions: [
+              0.969340195008, -0.219988840672, -1.63030601702, 0.659055570671, 0.409996530251, 0.827991745649, 0.659973702953,
+              0.969986572659, -0.229988430898, -1.62998213182, 0.660014325057, 0.409987399332, 0.726953560145, 0.660033053927 ]
+        time_from_start: 0.0
+      meta:
+        name: grasp_3cm
+        usage: posture
+        description: Parallel arms with 3cm separation.

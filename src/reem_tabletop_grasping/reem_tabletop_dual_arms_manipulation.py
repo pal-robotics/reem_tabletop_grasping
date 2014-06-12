@@ -147,6 +147,15 @@ class ObjectManipulationAS:
         self.right_group = moveit_commander.MoveGroupCommander("right_arm")
         self.left_group = moveit_commander.MoveGroupCommander("left_arm")
         
+        # Grasp motion names
+        self.pre_grasp = 'pre_grasp'
+        self.distance_based_grasps = {0.24 : 'grasp_24cm',
+                                      0.19 : 'grasp_19cm',
+                                      0.15 : 'grasp_15cm',
+                                      0.10 : 'grasp_10cm',
+                                      0.06  : 'grasp_6cm',
+                                      0.03  : 'grasp_3cm'}
+        
         # blocking action server
         rospy.loginfo("Creating Action Server '" + name + "'...")
         self.grasp_obj_as = ActionServer(name, ObjectManipulationAction, self.goal_callback, self.cancel_callback, False)
@@ -203,10 +212,6 @@ class ObjectManipulationAS:
         if self.message_fields_ok():
             self.as_result = ObjectManipulationResult()
             goal_message_field = self.current_goal.get_goal()
-            # Bend the torso
-            # As much as needed (we know we detected an object, so we adapt the bending to the height)
-            # 0.63 deg torso 2 (max: 35deg)
-           
             # Get the objects on the table
             ## Publish pose of goal position
             if DEBUG_MODE:
@@ -234,60 +239,55 @@ class ObjectManipulationAS:
             ########
             self.update_feedback("Check reachability")
             # Given the bounding box... 
-            # move the torso first
             
             # shift object pose up by halfway, clustering code gives obj frame on the bottom because of too much noise on the table cropping (2 1pixel lines behind the objects)
             # TODO remove this hack, fix it in table filtering
             object_pose.pose.position.z += obj_bbox_dims[2] / 2.0
             
             # TESTING HACK
-            object_pose.pose.position.x = 0.29
+            #object_pose.pose.position.x = 0.29
             
             rospy.loginfo("object_pose is: " + str(object_pose))
+            
+            # Get initial position, joint based, with arms open, torso still up
+            rospy.loginfo("Moving to initial grasping pose")
+            initial_pose_g = createPlayMotionGoal(self.pre_grasp)
+            self.play_motion_ac.send_goal_and_wait(initial_pose_g)
+            
+            # Move in front to the required distance, 82cm from the object (thats the distance between finger and base_link when testing)
+            rospy.loginfo("Moving magically some distance")
+            
+            # Adapt hands closing distance to object width + 5cm on each side (min dist between objects)
+            rospy.loginfo("Hands pose to object width")
+            initial_pose_g = createPlayMotionGoal(self.get_motion_from_width(obj_bbox_dims[1] + 0.03), skip_planning=True)
+            self.play_motion_ac.send_goal_and_wait(initial_pose_g)
+
+            # Add box representing the obstacle
+            self.scene.add_box("object_bbx", object_pose,
+                               (obj_bbox_dims[0], obj_bbox_dims[1], obj_bbox_dims[2]))
+            
+            # Bend torso down as necessary
+            rospy.loginfo("Bending torso down to the necessary height")
             torso_goal = createBendGoal(object_pose.pose.position.z)
             self.torso_as.send_goal_and_wait(torso_goal)
             print self.torso_as.get_result()
             
+            # Close hands to object width - 3cm (empyrical)
+            rospy.loginfo("Closing hands for grasp")
+            initial_pose_g = createPlayMotionGoal(self.get_motion_from_width(obj_bbox_dims[1] - 0.03), skip_planning=True)
+            self.play_motion_ac.send_goal_and_wait(initial_pose_g)
+            
+            # Attaching object to hand
+            self.scene.attach_box('hand_right_index_3_link', "object_bbx", object_pose, obj_bbox_dims)
+            
+            # Lift up torso
+            rospy.loginfo("Hopefully picking up the object")
+            torso_goal = createBendGoal(object_pose.pose.position.z + 0.3)
+            self.torso_as.send_goal_and_wait(torso_goal)
+            print self.torso_as.get_result()
 
-            
-            # Add box representing the obstacle
-            self.scene.add_box("object_bbx", object_pose,
-                               (obj_bbox_dims[0], obj_bbox_dims[1], obj_bbox_dims[2]))
-                        
-            # move arms safely to position around this object (note we need a perfect pose here)
-            rospy.loginfo("Creating goal for left arm")
-            goal_left_pose = copy.deepcopy(object_pose)
-            goal_left_pose.pose.position.x -= obj_bbox_dims[0] / 2.0
-            goal_left_pose.pose.position.y += obj_bbox_dims[1] * 2.5
-            goal_left_pose.pose.position.z -= 0.0
-            goal_left_pose.pose.orientation = Quaternion(0.0, 0.0, 0.0, 1.0)
-            rospy.loginfo("Pose: " + str(goal_left_pose))
-            if DEBUG_MODE:
-                pub = rospy.Publisher("/AAA_left_arm_pose", PoseStamped, latch=True)
-                pub.publish(goal_left_pose)
-            goal_left = create_move_group_pose_goal(goal_left_pose.pose, "left_arm", "hand_left_grasping_frame", plan_only=False)
-            self.move_group_as.send_goal_and_wait(goal_left)
-            
-            rospy.loginfo("Creating goal for right arm")
-            goal_right_pose = copy.deepcopy(object_pose)
-            goal_right_pose.pose.position.x -= obj_bbox_dims[0] / 2.0
-            goal_right_pose.pose.position.y -= obj_bbox_dims[1] * 2.5
-            goal_right_pose.pose.position.z -= 0.0
-            goal_right_pose.pose.orientation = Quaternion(0.0, 0.0, 0.0, 1.0)
-            rospy.loginfo("Pose: " + str(goal_right_pose))
-            if DEBUG_MODE:
-                pub = rospy.Publisher("/AAA_right_arm_pose", PoseStamped, latch=True)
-                pub.publish(goal_right_pose)
-            goal_right = create_move_group_pose_goal(goal_right_pose.pose, "right_arm", "hand_right_grasping_frame", plan_only=False)
-            self.move_group_as.send_goal_and_wait(goal_right)
-            
-            # Do a cartesian path with left arm to the bounding box
-            
-            # Do a cartesian path with right arm to the bounding box... plus a little more to push
-            
-            # unbend torso
-            
-            # We are done, maybe put a safer position or something
+            # Maybe some other safer position?
+        
             
             self.current_goal.set_succeeded(result=self.as_result)
             
@@ -454,36 +454,23 @@ class ObjectManipulationAS:
         else:
             return True
 
-    def send_arms_to_initial_pose(self, object_pose, obj_bbox_dims):
-        rospy.loginfo("Creating goal for left arm")
-        goal_left_pose = copy.deepcopy(object_pose)
-        goal_left_pose.pose.position.x -= obj_bbox_dims[0] / 2.0
-        goal_left_pose.pose.position.y += obj_bbox_dims[1] * 2.5
-        goal_left_pose.pose.position.z -= 0.0
-        goal_left_pose.pose.orientation = Quaternion(0.0, 0.0, 0.0, 1.0)
-        rospy.loginfo("Pose: " + str(goal_left_pose))
-        if DEBUG_MODE:
-            pub = rospy.Publisher("/AAA_left_arm_pose", PoseStamped, latch=True)
-            pub.publish(goal_left_pose)
-        goal_left = create_move_group_pose_goal(goal_left_pose.pose, "left_arm", "hand_left_grasping_frame", plan_only=False)
-        self.move_group_as.send_goal_and_wait(goal_left)
+    def get_motion_from_width(self, width):
+        """Given a width of an object get the motion to attain that distance between
+        the hands"""
+        print "Got a width of " + str(width)
+        best_dist = -1  # the best distance will be the first one that is bigger or equal than the width
+        dist_list = []
+        for dist in self.distance_based_grasps:
+            dist_list.append(dist)
+        dist_list.sort()
         
-        rospy.loginfo("Creating goal for right arm")
-        goal_right_pose = copy.deepcopy(object_pose)
-        goal_right_pose.pose.position.x -= obj_bbox_dims[0] / 2.0
-        goal_right_pose.pose.position.y -= obj_bbox_dims[1] * 2.5
-        goal_right_pose.pose.position.z -= 0.0
-        goal_right_pose.pose.orientation = Quaternion(0.0, 0.0, 0.0, 1.0)
-        rospy.loginfo("Pose: " + str(goal_right_pose))
-        if DEBUG_MODE:
-            pub = rospy.Publisher("/AAA_right_arm_pose", PoseStamped, latch=True)
-            pub.publish(goal_right_pose)
-        goal_right = create_move_group_pose_goal(goal_right_pose.pose, "right_arm", "hand_right_grasping_frame", plan_only=False)
-        self.move_group_as.send_goal_and_wait(goal_right)
-            
-        
-        return
-    
-    def move_arm_straight_line(self, arm):
-        return
-    
+        for dist in dist_list:
+            if dist >= width:
+                best_dist = dist
+                break
+        if best_dist == -1:
+            rospy.logerr("Width too big, won't fit between any pose, returning biggest grasp")
+            best_dist = dist
+        print "Which got me a best_dist of " + str(best_dist)
+        print "Which ends in the movement: " + self.distance_based_grasps.get(best_dist)
+        return self.distance_based_grasps.get(best_dist)
