@@ -232,6 +232,10 @@ def createBendGoal(height):
     given_height = 1.10 - height
     max_torso_rads = 0.63
     torso_rads = 0.63 * given_height / float(height_diff)
+    if torso_rads > 0.70: # upper joint limit, 45 deg = 0.78 rad... calibration sucks, so we set it even lower
+        torso_rads = 0.70
+    elif torso_rads < -0.18: # lower joint limit, -15 deg = 0.26 rad... calibration sucks, so we set it even lower
+        torso_rads = -0.18
     goal = createTorsoGoal(0.0, torso_rads)
     return goal
     

@@ -235,7 +235,7 @@ class ObjectManipulationAS:
             rospy.logdebug("in AS: Closest cluster id is: " + str(closest_cluster_id))
             #TODO visualize bbox
             #TODO publish filtered pointcloud?
-            rospy.loginfo("BBOX: " + str(obj_bbox_dims))
+            print "BBOX: " + str(obj_bbox_dims) 
             ########
             self.update_feedback("Check reachability")
             # Given the bounding box... 
@@ -247,41 +247,46 @@ class ObjectManipulationAS:
             # TESTING HACK
             #object_pose.pose.position.x = 0.29
             
-            rospy.loginfo("object_pose is: " + str(object_pose))
+            print "object_pose is: " + str(object_pose)
+            
+            # Move to a correct orientation to just move straight
+            print "Moving to a position where we can just go straight forward to the distance we need"
             
             # Get initial position, joint based, with arms open, torso still up
-            rospy.loginfo("Moving to initial grasping pose")
+            print "Moving to initial grasping pose" 
             initial_pose_g = createPlayMotionGoal(self.pre_grasp)
             self.play_motion_ac.send_goal_and_wait(initial_pose_g)
             
-            # Move in front to the required distance, 82cm from the object (thats the distance between finger and base_link when testing)
-            rospy.loginfo("Moving magically some distance")
-            
             # Adapt hands closing distance to object width + 5cm on each side (min dist between objects)
-            rospy.loginfo("Hands pose to object width")
-            initial_pose_g = createPlayMotionGoal(self.get_motion_from_width(obj_bbox_dims[1] + 0.03), skip_planning=True)
+            print "Hands pose to object width"
+            initial_pose_g = createPlayMotionGoal(self.get_motion_from_width(obj_bbox_dims[0] + 0.03), skip_planning=True)
             self.play_motion_ac.send_goal_and_wait(initial_pose_g)
+            
+            
+            # Move in front to the required distance, 82cm from the object (thats the distance between finger and base_link when testing)
+            print "Moving magically some distance"
+
 
             # Add box representing the obstacle
             self.scene.add_box("object_bbx", object_pose,
                                (obj_bbox_dims[0], obj_bbox_dims[1], obj_bbox_dims[2]))
             
             # Bend torso down as necessary
-            rospy.loginfo("Bending torso down to the necessary height")
+            print "Bending torso down to the necessary height"
             torso_goal = createBendGoal(object_pose.pose.position.z)
             self.torso_as.send_goal_and_wait(torso_goal)
             print self.torso_as.get_result()
             
             # Close hands to object width - 3cm (empyrical)
-            rospy.loginfo("Closing hands for grasp")
-            initial_pose_g = createPlayMotionGoal(self.get_motion_from_width(obj_bbox_dims[1] - 0.03), skip_planning=True)
+            print "Closing hands for grasp"
+            initial_pose_g = createPlayMotionGoal(self.get_motion_from_width(obj_bbox_dims[0] - 0.06), skip_planning=True)
             self.play_motion_ac.send_goal_and_wait(initial_pose_g)
             
             # Attaching object to hand
             self.scene.attach_box('hand_right_index_3_link', "object_bbx", object_pose, obj_bbox_dims)
             
             # Lift up torso
-            rospy.loginfo("Hopefully picking up the object")
+            print "Hopefully picking up the object"
             torso_goal = createBendGoal(object_pose.pose.position.z + 0.3)
             self.torso_as.send_goal_and_wait(torso_goal)
             print self.torso_as.get_result()
