@@ -220,6 +220,7 @@ def createTorsoGoal(j1, j2):
 def createBendGoal(height):
     """Create a FollowJointTrajectoryGoal with """
     # calculate rads torso 2 by height
+    # !!!!!!!!!!!!!! OLD DATA OLD DATA OLD DATA
     # there is a relation like 0.00 rad == 1.10m
     #                          0.23 rad == 0.99m
     #                          0.63 rad == 1.84m
@@ -238,7 +239,34 @@ def createBendGoal(height):
         torso_rads = -0.18
     goal = createTorsoGoal(0.0, torso_rads)
     return goal
+   
+def createHeadGoal(j1, j2):
+    """Creates a FollowJointTrajectoryGoal with the values specified in j1 and j2 for the joint positions
+    @arg j1 float value for head_1_joint
+    @arg j2 float value for head_2_joint
+    @returns FollowJointTrajectoryGoal with the specified goal"""
+    fjtg = FollowJointTrajectoryGoal()
+    fjtg.trajectory.joint_names.append('head_1_joint')
+    fjtg.trajectory.joint_names.append('head_2_joint')
+    point = JointTrajectoryPoint()
+    point.positions.append(j1)
+    point.positions.append(j2)
+    point.velocities.append(0.0)
+    point.velocities.append(0.0)
+    point.time_from_start = rospy.Duration(4.0)
+    for joint in fjtg.trajectory.joint_names: # Specifying high tolerances for the hand as they are slow compared to other hardware
+        goal_tol = JointTolerance()
+        goal_tol.name = joint
+        goal_tol.position = 5.0
+        goal_tol.velocity = 5.0
+        goal_tol.acceleration = 5.0
+        fjtg.goal_tolerance.append(goal_tol)
+    fjtg.goal_time_tolerance = rospy.Duration(3)
     
+    fjtg.trajectory.points.append(point)
+    fjtg.trajectory.header.stamp = rospy.Time.now()
+    return fjtg 
+   
     
     
 def create_move_group_pose_goal(goal_pose=Pose(), group="right_arm_torso", end_link_name=None, plan_only=True):

@@ -58,7 +58,8 @@ from moveit_commander import PlanningSceneInterface
 
 from helper_functions import createPickupGoal, dist_between_poses, createPlaceGoal, \
                             moveit_error_dict, createCartesianPathRequest, createPlayMotionGoal, \
-                            createExecuteKnownTrajectoryRequest, createBendGoal, create_move_group_pose_goal
+                            createExecuteKnownTrajectoryRequest, createBendGoal, create_move_group_pose_goal, \
+                            createHeadGoal
 from control_msgs.msg import FollowJointTrajectoryAction
 from moveit_msgs.msg._MoveItErrorCodes import MoveItErrorCodes
 from play_motion_msgs.msg import PlayMotionAction
@@ -85,6 +86,7 @@ PLAY_MOTION_AS = '/play_motion'
 CARTESIAN_PATH_SRV = '/compute_cartesian_path'
 EXECUTE_KNOWN_TRAJ_SRV = '/execute_kinematic_path'
 TORSO_AS = '/torso_controller/follow_joint_trajectory'
+HEAD_AS = '/head_controller/follow_joint_trajectory'
 MOVE_GROUP_AS = '/move_group'
 
 OFFSET_OVER_TABLE_PLACING = 0.08
@@ -134,6 +136,10 @@ class ObjectManipulationAS:
         rospy.loginfo("Connecting to torso AS...")
         self.torso_as.wait_for_server()
         
+        self.head_as = SimpleActionClient(HEAD_AS, FollowJointTrajectoryAction)
+        rospy.loginfo("Connecting to head AS...")
+        self.head_as.wait_for_server()
+        
         self.move_group_as = SimpleActionClient(MOVE_GROUP_AS, MoveGroupAction)
         rospy.loginfo("Connecting to move_group AS...")
         self.move_group_as.wait_for_server()
@@ -149,12 +155,34 @@ class ObjectManipulationAS:
         
         # Grasp motion names
         self.pre_grasp = 'pre_grasp'
-        self.distance_based_grasps = {0.24 : 'grasp_24cm',
+        # Those grasps are all distances referenced with the robot with the torso
+        # at 0.00 rad (top/up)
+        # when using the torso down (0.61rad, bot/down) they are bigger, in between 0-6cm bigger
+        self.top_bot_closing_variation = 0.04
+        self.min_torso_rads = 0.61
+        self.max_torso_rads = -0.18
+        # X distance is 36cm at 0.00 rad and 43cm at 0.61 rad, so a variation of 7cm
+        self.x_min = 0.36 +0.05 # Magic calibration distance
+        self.x_max = 0.43 +0.05
+        self.x_dist_variation = self.x_max - self.x_min 
+        # Z distance on 0.00 rad is 107cm and on 0.61 rad is 74cm 
+        self.z_min = 0.74
+        self.z_max = 1.07
+        self.z_dist_variation = self.z_max - self.z_min
+        self.distance_based_grasps = {
+                                      0.24 : 'grasp_24cm',
+                                      0.22 : 'grasp_22cm',
                                       0.19 : 'grasp_19cm',
-                                      0.15 : 'grasp_15cm',
+                                      0.17 : 'grasp_17cm',
+                                      0.14 : 'grasp_14cm',
+                                      0.12 : 'grasp_12cm',
                                       0.10 : 'grasp_10cm',
-                                      0.06  : 'grasp_6cm',
-                                      0.03  : 'grasp_3cm'}
+                                      0.08 : 'grasp_8cm',
+                                      0.06 : 'grasp_6cm',
+                                      0.04 : 'grasp_4cm',
+                                      0.02 : 'grasp_2cm',
+                                      0.00 : 'grasp_0cm'
+                                      }
         
         # blocking action server
         rospy.loginfo("Creating Action Server '" + name + "'...")
@@ -162,11 +190,6 @@ class ObjectManipulationAS:
         self.as_feedback = ObjectManipulationFeedback()
         self.as_result = ObjectManipulationActionResult()
         self.current_goal = None
-
-        # Take care of left and right arm grasped stuff
-        self.right_hand_object = None #"right_hand_object"
-        self.left_hand_object = None
-        self.current_side = 'right'
 
         rospy.loginfo("Starting '" + OBJECT_MANIPULATION_AS + "' Action Server!")
         self.grasp_obj_as.start()
@@ -213,6 +236,11 @@ class ObjectManipulationAS:
             self.as_result = ObjectManipulationResult()
             goal_message_field = self.current_goal.get_goal()
             # Get the objects on the table
+            # MOVE HEAD DOWN!!
+            print "Moving head down"
+            look_down_goal = createHeadGoal(0.0, 0.5)
+            self.head_as.send_goal_and_wait(look_down_goal)
+            
             ## Publish pose of goal position
             if DEBUG_MODE:
                 self.to_grasp_object_pose_pub.publish(goal_message_field.target_pose)
@@ -237,7 +265,7 @@ class ObjectManipulationAS:
             #TODO publish filtered pointcloud?
             print "BBOX: " + str(obj_bbox_dims) 
             ########
-            self.update_feedback("Check reachability")
+            #self.update_feedback("Check reachability")
             # Given the bounding box... 
             
             # shift object pose up by halfway, clustering code gives obj frame on the bottom because of too much noise on the table cropping (2 1pixel lines behind the objects)
@@ -247,47 +275,60 @@ class ObjectManipulationAS:
             # TESTING HACK
             #object_pose.pose.position.x = 0.29
             
-            print "object_pose is: " + str(object_pose)
+            print "object_pose is: " + str(object_pose) + "\n"
+            print "objects dims are: " + str(obj_bbox_dims) + "\n"
             
             # Move to a correct orientation to just move straight
-            print "Moving to a position where we can just go straight forward to the distance we need"
+            print "====Moving to a position where we can just go straight forward to the distance we need"
+            print "This position should be where we have a relative Y axis with the object to grasp ~= 0 "
+            print "Which means we are looking straight to the object in the middle"
+            nav_goal = PoseStamped()
+            nav_goal.header.frame_id = "base_link"
+            nav_goal.pose.position.y = object_pose.pose.position.y
+            nav_goal.pose.orientation.w = 1.0
+            print "So navigation goal :" + str(nav_goal) + "\n"
             
             # Get initial position, joint based, with arms open, torso still up
-            print "Moving to initial grasping pose" 
+            print "====Moving to initial grasping pose" 
             initial_pose_g = createPlayMotionGoal(self.pre_grasp)
             self.play_motion_ac.send_goal_and_wait(initial_pose_g)
             
             # Adapt hands closing distance to object width + 5cm on each side (min dist between objects)
-            print "Hands pose to object width"
-            initial_pose_g = createPlayMotionGoal(self.get_motion_from_width(obj_bbox_dims[0] + 0.03), skip_planning=True)
+            print "=====Hands pose to object width"
+            initial_pose_g = createPlayMotionGoal(self.get_motion_from_width_and_height(obj_bbox_dims[0] + 0.06, object_pose.pose.position.z), skip_planning=True)
             self.play_motion_ac.send_goal_and_wait(initial_pose_g)
             
             
             # Move in front to the required distance, 82cm from the object (thats the distance between finger and base_link when testing)
-            print "Moving magically some distance"
-
+            print "====Moving magically some distance"
+            print "The object is at: " + str(object_pose.pose.position.x),
+            print " and for a height of " + str(object_pose.pose.position.z)
+            # The more bent we are, the farther our grasp point is
+            x_needed = self.x_min + (self.x_dist_variation * (1 - (object_pose.pose.position.z - self.z_min) / self.z_dist_variation ))
+            print "We need to be at: " + str(x_needed) + "m"
+            print "So we need to advance: " + str(object_pose.pose.position.x - x_needed) + "m"
 
             # Add box representing the obstacle
             self.scene.add_box("object_bbx", object_pose,
                                (obj_bbox_dims[0], obj_bbox_dims[1], obj_bbox_dims[2]))
             
             # Bend torso down as necessary
-            print "Bending torso down to the necessary height"
+            print "===Bending torso down to the necessary height"
             torso_goal = createBendGoal(object_pose.pose.position.z)
             self.torso_as.send_goal_and_wait(torso_goal)
             print self.torso_as.get_result()
             
             # Close hands to object width - 3cm (empyrical)
-            print "Closing hands for grasp"
-            initial_pose_g = createPlayMotionGoal(self.get_motion_from_width(obj_bbox_dims[0] - 0.06), skip_planning=True)
+            print "===Closing hands for grasp"
+            initial_pose_g = createPlayMotionGoal(self.get_motion_from_width_and_height(obj_bbox_dims[0] - 0.06, object_pose.pose.position.z), skip_planning=True)
             self.play_motion_ac.send_goal_and_wait(initial_pose_g)
             
             # Attaching object to hand
             self.scene.attach_box('hand_right_index_3_link', "object_bbx", object_pose, obj_bbox_dims)
             
             # Lift up torso
-            print "Hopefully picking up the object"
-            torso_goal = createBendGoal(object_pose.pose.position.z + 0.3)
+            print "===Hopefully picking up the object"
+            torso_goal = createBendGoal(object_pose.pose.position.z + 0.2)
             self.torso_as.send_goal_and_wait(torso_goal)
             print self.torso_as.get_result()
 
@@ -302,6 +343,7 @@ class ObjectManipulationAS:
             self.as_result = ObjectManipulationResult()
             goal_message_field = self.current_goal.get_goal()
             
+            print "BEND TO THE DESIRED Z"
             # cartesian path down to the table height given
 
 
@@ -459,10 +501,15 @@ class ObjectManipulationAS:
         else:
             return True
 
-    def get_motion_from_width(self, width):
+    def get_motion_from_width_and_height(self, width, height):
         """Given a width of an object get the motion to attain that distance between
         the hands"""
         print "Got a width of " + str(width)
+        print "And a height of " + str(height)
+        # we adjust how much we want to close the hands
+        # because the robot does not close the same on the same pose if he is bent over or not bend over           
+        objective_width = width - self.top_bot_closing_variation * (height - self.z_min) / self.z_dist_variation
+        print "objective_width: " + str(objective_width)
         best_dist = -1  # the best distance will be the first one that is bigger or equal than the width
         dist_list = []
         for dist in self.distance_based_grasps:
@@ -470,7 +517,7 @@ class ObjectManipulationAS:
         dist_list.sort()
         
         for dist in dist_list:
-            if dist >= width:
+            if dist >= objective_width:
                 best_dist = dist
                 break
         if best_dist == -1:
