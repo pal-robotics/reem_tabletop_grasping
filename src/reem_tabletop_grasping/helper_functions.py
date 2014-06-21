@@ -190,7 +190,7 @@ def createPlayMotionGoal(motion_name, priority=1, skip_planning=False):
     pmg.skip_planning = skip_planning
     return pmg
 
-def createTorsoGoal(j1, j2):
+def createTorsoGoal(j1, j2, time=3.0):
     """Creates a FollowJointTrajectoryGoal with the values specified in j1 and j2 for the joint positions
     @arg j1 float value for head_1_joint
     @arg j2 float value for head_2_joint
@@ -203,7 +203,7 @@ def createTorsoGoal(j1, j2):
     point.positions.append(j2)
     point.velocities.append(0.0)
     point.velocities.append(0.0)
-    point.time_from_start = rospy.Duration(4.0)
+    point.time_from_start = rospy.Duration(time)
     for joint in fjtg.trajectory.joint_names:  # Specifying high tolerances
         goal_tol = JointTolerance()
         goal_tol.name = joint
@@ -240,7 +240,7 @@ def createBendGoal(height):
     goal = createTorsoGoal(0.0, torso_rads)
     return goal
    
-def createHeadGoal(j1, j2):
+def createHeadGoal(j1, j2, time=4.0):
     """Creates a FollowJointTrajectoryGoal with the values specified in j1 and j2 for the joint positions
     @arg j1 float value for head_1_joint
     @arg j2 float value for head_2_joint
@@ -253,7 +253,7 @@ def createHeadGoal(j1, j2):
     point.positions.append(j2)
     point.velocities.append(0.0)
     point.velocities.append(0.0)
-    point.time_from_start = rospy.Duration(4.0)
+    point.time_from_start = rospy.Duration(time)
     for joint in fjtg.trajectory.joint_names: # Specifying high tolerances for the hand as they are slow compared to other hardware
         goal_tol = JointTolerance()
         goal_tol.name = joint

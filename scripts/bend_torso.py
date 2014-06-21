@@ -82,7 +82,7 @@ if __name__ == '__main__':
     torso_as.wait_for_server()
     rospy.sleep(1.0)
     rospy.loginfo("Connected, sending goal.")
-    goal = createTorsoGoal(0.0, 0.00) # top limit = 0.63)
+    goal = createTorsoGoal(0.0, 0.0) # top limit = 0.63)
     torso_as.send_goal(goal)
     rospy.loginfo("Goal sent, waiting...")
     torso_as.wait_for_result()

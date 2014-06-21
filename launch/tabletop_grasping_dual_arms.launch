@@ -6,5 +6,8 @@
   <node name="depth_throtle_server" pkg="reem_tabletop_grasping" type="depth_throtle_server.py"/>
   <!-- Launch the clusters detection -->
   <node name="clusters_detection" pkg="object_recognition_core" type="detection" args="-c $(find reem_object_recognition)/config/tabletop/detection.clusters.ros.ork.reem.throtled" />
+  <!-- Add poses for dual arm grasping -->
+  <rosparam file="$(find reem_tabletop_grasping)/config/rh2_manip_poses.yaml" command="load" ns="" />
+
 
 </launch>

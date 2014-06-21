@@ -36,6 +36,7 @@
 
 import copy
 import sys
+import math
 # ROS imports
 import rospy
 import tf
@@ -65,6 +66,10 @@ from moveit_msgs.msg._MoveItErrorCodes import MoveItErrorCodes
 from play_motion_msgs.msg import PlayMotionAction
 from moveit_msgs.srv import ExecuteKnownTrajectory, GetCartesianPath
 from moveit_msgs.msg._MoveGroupAction import MoveGroupAction
+from odom_moving.srv import Turn, TurnRequest
+from odom_moving.srv import Straight, StraightRequest
+
+from speed_limit.msg import DisableGoal, DisableAction
 
 import moveit_commander
 from cartesian_goals import trajectoryConstructor
@@ -88,6 +93,9 @@ EXECUTE_KNOWN_TRAJ_SRV = '/execute_kinematic_path'
 TORSO_AS = '/torso_controller/follow_joint_trajectory'
 HEAD_AS = '/head_controller/follow_joint_trajectory'
 MOVE_GROUP_AS = '/move_group'
+STRAIGHT_SRV = '/straight_nav'
+TURN_SRV = '/turn_nav'
+SPEED_LIMIT_AS = '/speed_limit/disable'
 
 OFFSET_OVER_TABLE_PLACING = 0.08
 
@@ -121,13 +129,13 @@ class ObjectManipulationAS:
         self.depth_service = rospy.ServiceProxy(DEPTH_THROTLE_SRV, Empty)
         self.depth_service.wait_for_service()
 
-        rospy.loginfo("Connecting to cartesian path server '" + CARTESIAN_PATH_SRV + "'...")
-        self.cartesian_path_service = rospy.ServiceProxy(CARTESIAN_PATH_SRV, GetCartesianPath)
-        self.cartesian_path_service.wait_for_service()
+#         rospy.loginfo("Connecting to cartesian path server '" + CARTESIAN_PATH_SRV + "'...")
+#         self.cartesian_path_service = rospy.ServiceProxy(CARTESIAN_PATH_SRV, GetCartesianPath)
+#         self.cartesian_path_service.wait_for_service()
         
-        rospy.loginfo("Connecting to known traj executor server '" + EXECUTE_KNOWN_TRAJ_SRV + "'...")
-        self.execute_known_traj_service = rospy.ServiceProxy(EXECUTE_KNOWN_TRAJ_SRV, ExecuteKnownTrajectory)
-        self.execute_known_traj_service.wait_for_service()
+#         rospy.loginfo("Connecting to known traj executor server '" + EXECUTE_KNOWN_TRAJ_SRV + "'...")
+#         self.execute_known_traj_service = rospy.ServiceProxy(EXECUTE_KNOWN_TRAJ_SRV, ExecuteKnownTrajectory)
+#         self.execute_known_traj_service.wait_for_service()
 
         rospy.loginfo("Getting a PlanningSceneInterface instance...")
         self.scene = PlanningSceneInterface()
@@ -144,14 +152,28 @@ class ObjectManipulationAS:
         rospy.loginfo("Connecting to move_group AS...")
         self.move_group_as.wait_for_server()
         
-        rospy.loginfo("Creating trajectory constructor...")
-        self.tC = trajectoryConstructor()
+        rospy.loginfo("Connecting to straight move server '" + STRAIGHT_SRV + "'...")
+        self.straight_srv = rospy.ServiceProxy(STRAIGHT_SRV, Straight)
+        self.straight_srv.wait_for_service()
         
-        moveit_commander.roscpp_initialize(sys.argv)
-        self.robot = moveit_commander.RobotCommander()
-        self.scene = moveit_commander.PlanningSceneInterface()
-        self.right_group = moveit_commander.MoveGroupCommander("right_arm")
-        self.left_group = moveit_commander.MoveGroupCommander("left_arm")
+        rospy.loginfo("Connecting to straight move server '" + TURN_SRV + "'...")
+        self.turn_srv = rospy.ServiceProxy(TURN_SRV, Turn)
+        self.turn_srv.wait_for_service()
+        
+        self.speedl_as = SimpleActionClient(SPEED_LIMIT_AS, DisableAction)
+        rospy.loginfo("Connecting to speed limit disable AS...")
+        self.speedl_as.wait_for_server()
+        
+#         rospy.loginfo("Creating trajectory constructor...")
+#         self.tC = trajectoryConstructor()
+        
+#         moveit_commander.roscpp_initialize(sys.argv)
+#         self.robot = moveit_commander.RobotCommander()
+#         self.scene = moveit_commander.PlanningSceneInterface()
+#         self.right_group = moveit_commander.MoveGroupCommander("right_arm")
+#         self.left_group = moveit_commander.MoveGroupCommander("left_arm")
+        
+        self.grasped_object = False
         
         # Grasp motion names
         self.pre_grasp = 'pre_grasp'
@@ -162,8 +184,8 @@ class ObjectManipulationAS:
         self.min_torso_rads = 0.61
         self.max_torso_rads = -0.18
         # X distance is 36cm at 0.00 rad and 43cm at 0.61 rad, so a variation of 7cm
-        self.x_min = 0.36 +0.05 # Magic calibration distance
-        self.x_max = 0.43 +0.05
+        self.x_min = 0.36 - 0.09 # Magic calibration distance
+        self.x_max = 0.43 - 0.09
         self.x_dist_variation = self.x_max - self.x_min 
         # Z distance on 0.00 rad is 107cm and on 0.61 rad is 74cm 
         self.z_min = 0.74
@@ -238,7 +260,7 @@ class ObjectManipulationAS:
             # Get the objects on the table
             # MOVE HEAD DOWN!!
             print "Moving head down"
-            look_down_goal = createHeadGoal(0.0, 0.5)
+            look_down_goal = createHeadGoal(0.0, 0.5, time=2.0)
             self.head_as.send_goal_and_wait(look_down_goal)
             
             ## Publish pose of goal position
@@ -246,31 +268,8 @@ class ObjectManipulationAS:
                 self.to_grasp_object_pose_pub.publish(goal_message_field.target_pose)
             self.update_feedback("Detecting clusters")
 
-            if not self.wait_for_recognized_array(wait_time=5, timeout_time=10):  # wait until we get clusters published
-                self.update_aborted("Failed detecting clusters")
+            object_pose, obj_bbox_dims = self.detect_object(goal_message_field.target_pose)
             
-            # Search closer cluster
-            # transform pose to base_link if needed
-            if goal_message_field.target_pose.header.frame_id != "base_link":
-                self.tf_listener.waitForTransform("base_link", goal_message_field.target_pose.header.frame_id, goal_message_field.target_pose.header.stamp, rospy.Duration(5))
-                object_to_grasp_pose = self.tf_listener.transformPose("base_link", goal_message_field.target_pose)
-            else:
-                object_to_grasp_pose = goal_message_field.target_pose.pose
-
-            self.update_feedback("Searching closer cluster while clustering")
-            (closest_cluster_id, (object_points, obj_bbox_dims, object_bounding_box, object_pose)) = self.get_id_of_closest_cluster_to_pose(object_to_grasp_pose)
-
-            rospy.logdebug("in AS: Closest cluster id is: " + str(closest_cluster_id))
-            #TODO visualize bbox
-            #TODO publish filtered pointcloud?
-            print "BBOX: " + str(obj_bbox_dims) 
-            ########
-            #self.update_feedback("Check reachability")
-            # Given the bounding box... 
-            
-            # shift object pose up by halfway, clustering code gives obj frame on the bottom because of too much noise on the table cropping (2 1pixel lines behind the objects)
-            # TODO remove this hack, fix it in table filtering
-            object_pose.pose.position.z += obj_bbox_dims[2] / 2.0
             
             # TESTING HACK
             #object_pose.pose.position.x = 0.29
@@ -279,63 +278,170 @@ class ObjectManipulationAS:
             print "objects dims are: " + str(obj_bbox_dims) + "\n"
             
             # Move to a correct orientation to just move straight
-            print "====Moving to a position where we can just go straight forward to the distance we need"
+            print "\n====Moving to a position where we can just go straight forward to the distance we need"
             print "This position should be where we have a relative Y axis with the object to grasp ~= 0 "
             print "Which means we are looking straight to the object in the middle"
             nav_goal = PoseStamped()
             nav_goal.header.frame_id = "base_link"
             nav_goal.pose.position.y = object_pose.pose.position.y
             nav_goal.pose.orientation.w = 1.0
-            print "So navigation goal :" + str(nav_goal) + "\n"
+            print "So navigation goal would be:" + str(nav_goal) + "\n"
+            
+            if object_pose.pose.position.y > 0.0:
+                print "\n\n~~~~~~Object to the LEFT~~~~~~~~~"
+                print "So we need to turn -X.XX degrees (negative)"
+            elif object_pose.pose.position.y < 0.0:
+                print "\n\n~~~~~~Object to the RIGHT~~~~~~~~~"
+                print "So we need to turn X.XX degrees (positive)"
+
+            if abs(object_pose.pose.position.y) > 0.02: # minimum threshold to rotate in cm
+                # Calculate how much to turn to look in front
+                angle_to_turn = self.get_angle_to_turn(object_pose.pose.position.x, object_pose.pose.position.y)
+                print "We need to turn: " + str(math.degrees(angle_to_turn))
+                if abs(math.degrees(angle_to_turn)) > 2.0: # minimum threshold to rotate... 
+                    turn_req = TurnRequest()
+                    turn_req.enable = True
+                    if angle_to_turn > 0.0:
+                        turn_req.degrees = math.degrees(angle_to_turn) - 1.5 # offset that the robot rotates too much
+                    else:
+                        turn_req.degrees = math.degrees(angle_to_turn) + 1.5 # offset that the robot rotates too much
+                    print "\nSending turn request: " + str(turn_req)
+                    self.turn_srv.call(turn_req)
+                
+                    object_pose, obj_bbox_dims = self.detect_object(goal_message_field.target_pose)
+                    print "\nAfter turning the object pose is:"
+                    print object_pose
+                    print "And now obj_bbox_dims are:"
+                    print obj_bbox_dims
+            
+#             
+#             if True:
+#                 self.current_goal.set_succeeded(result=self.as_result)
+#                 return
+            
             
             # Get initial position, joint based, with arms open, torso still up
-            print "====Moving to initial grasping pose" 
+            print "\n====Moving to initial grasping pose" 
             initial_pose_g = createPlayMotionGoal(self.pre_grasp)
             self.play_motion_ac.send_goal_and_wait(initial_pose_g)
             
             # Adapt hands closing distance to object width + 5cm on each side (min dist between objects)
-            print "=====Hands pose to object width"
+            print "\n=====Hands pose to object width"
             initial_pose_g = createPlayMotionGoal(self.get_motion_from_width_and_height(obj_bbox_dims[0] + 0.06, object_pose.pose.position.z), skip_planning=True)
             self.play_motion_ac.send_goal_and_wait(initial_pose_g)
             
+            # Bend torso up as necessary
+            print "\n===Bending torso up to the necessary height + an offset"
+            torso_goal = createBendGoal(object_pose.pose.position.z + 0.2)
+            self.torso_as.send_goal_and_wait(torso_goal)
+            print self.torso_as.get_result()
             
             # Move in front to the required distance, 82cm from the object (thats the distance between finger and base_link when testing)
-            print "====Moving magically some distance"
+            print "\n====Moving magically some distance"
             print "The object is at: " + str(object_pose.pose.position.x),
             print " and for a height of " + str(object_pose.pose.position.z)
             # The more bent we are, the farther our grasp point is
             x_needed = self.x_min + (self.x_dist_variation * (1 - (object_pose.pose.position.z - self.z_min) / self.z_dist_variation ))
             print "We need to be at: " + str(x_needed) + "m"
             print "So we need to advance: " + str(object_pose.pose.position.x - x_needed) + "m"
+            advance_dist = object_pose.pose.position.x - x_needed
+            
+            dg = DisableGoal(duration=15.0)
+            self.speedl_as.send_goal(dg)
+            self.speedl_as.wait_for_result(rospy.Duration(0.1))
+            
+            straight_req = StraightRequest()
+            straight_req.enable = True
+            straight_req.meters = advance_dist
+            self.straight_srv.call(straight_req)
+
+
+            expected_new_object_pose = copy.deepcopy(object_pose)
+            expected_new_object_pose.pose.position.x -= advance_dist
+            object_posecheck, obj_bbox_dimscheck = self.detect_object(expected_new_object_pose)
+            if DEBUG_MODE:
+                self.to_grasp_object_pose_pub.publish(expected_new_object_pose)
+            print "Using as reference: " + str(expected_new_object_pose)
+            print "\nAfter moving forward the object pose is:"
+            print object_posecheck
+            print "And now obj_bbox_dims are:"
+            print obj_bbox_dimscheck
+
+
+
+
 
             # Add box representing the obstacle
             self.scene.add_box("object_bbx", object_pose,
                                (obj_bbox_dims[0], obj_bbox_dims[1], obj_bbox_dims[2]))
             
             # Bend torso down as necessary
-            print "===Bending torso down to the necessary height"
-            torso_goal = createBendGoal(object_pose.pose.position.z)
+            print "\n===Bending torso down to the necessary height"
+            torso_goal = createBendGoal(object_pose.pose.position.z + 0.03)
             self.torso_as.send_goal_and_wait(torso_goal)
             print self.torso_as.get_result()
             
             # Close hands to object width - 3cm (empyrical)
-            print "===Closing hands for grasp"
-            initial_pose_g = createPlayMotionGoal(self.get_motion_from_width_and_height(obj_bbox_dims[0] - 0.06, object_pose.pose.position.z), skip_planning=True)
+            print "\n===Closing hands for grasp"
+            initial_pose_g = createPlayMotionGoal(self.get_motion_from_width_and_height(obj_bbox_dims[0] - 0.085, object_pose.pose.position.z), skip_planning=True)
             self.play_motion_ac.send_goal_and_wait(initial_pose_g)
             
             # Attaching object to hand
             self.scene.attach_box('hand_right_index_3_link', "object_bbx", object_pose, obj_bbox_dims)
             
             # Lift up torso
-            print "===Hopefully picking up the object"
+            print "\n===Hopefully picking up the object"
             torso_goal = createBendGoal(object_pose.pose.position.z + 0.2)
             self.torso_as.send_goal_and_wait(torso_goal)
             print self.torso_as.get_result()
 
+            # Let the robot move freely
+            dg = DisableGoal(duration=15.0)
+            self.speedl_as.send_goal(dg)
+            self.speedl_as.wait_for_result(rospy.Duration(0.1))
+            
             # Maybe some other safer position?
+            print "\n===Moving to safer position"
+            straight_req = StraightRequest()
+            straight_req.enable = True
+            straight_req.meters = -advance_dist
+            self.straight_srv.call(straight_req)
         
+            self.grasped_object = True
             
             self.current_goal.set_succeeded(result=self.as_result)
+
+    def detect_object(self, target_pose):
+        """Given a posestamped target_pose search the closer cluster to that pose"""
+        if not self.wait_for_recognized_array(wait_time=5, timeout_time=10):  # wait until we get clusters published
+            self.update_aborted("Failed detecting clusters")
+        
+        # Search closer cluster
+        # transform pose to base_link if needed
+        if target_pose.header.frame_id != "base_link":
+            self.tf_listener.waitForTransform("base_link", target_pose.header.frame_id, target_pose.header.stamp, rospy.Duration(5))
+            object_to_grasp_pose = self.tf_listener.transformPose("base_link", target_pose)
+        else:
+            object_to_grasp_pose = target_pose.pose
+
+        self.update_feedback("Searching closer cluster while clustering")
+        (closest_cluster_id, (object_points, obj_bbox_dims, object_bounding_box, object_pose)) = self.get_id_of_closest_cluster_to_pose(object_to_grasp_pose)
+
+        rospy.logdebug("in AS: Closest cluster id is: " + str(closest_cluster_id))
+        #TODO visualize bbox
+        #TODO publish filtered pointcloud?
+        print "BBOX: " + str(obj_bbox_dims) 
+        ########
+        #self.update_feedback("Check reachability")
+        # Given the bounding box... 
+        
+        # shift object pose up by halfway, clustering code gives obj frame on the bottom because of too much noise on the table cropping (2 1pixel lines behind the objects)
+        # TODO remove this hack, fix it in table filtering
+        object_pose.pose.position.z += obj_bbox_dims[2] / 2.0
+        
+        return object_pose, obj_bbox_dims
+
+
             
     def place_operation(self):
         """Execute the place operation"""
@@ -343,8 +449,49 @@ class ObjectManipulationAS:
             self.as_result = ObjectManipulationResult()
             goal_message_field = self.current_goal.get_goal()
             
-            print "BEND TO THE DESIRED Z"
-            # cartesian path down to the table height given
+            if self.grasped_object:
+                dg = DisableGoal(duration=10.0)
+                self.speedl_as.send_goal(dg)
+                self.speedl_as.wait_for_result(rospy.Duration(0.1))
+                print "\n\n===Move forward to get to the real POI"
+                straight_req = StraightRequest()
+                straight_req.enable = True
+                straight_req.meters = 0.8
+                self.straight_srv.call(straight_req)
+                
+                print "====BEND TO THE DESIRED Z"
+                print "goal message: " + str(goal_message_field)
+                torso_goal = createBendGoal(goal_message_field.target_pose.pose.position.z + 0.1)
+                self.torso_as.send_goal_and_wait(torso_goal)
+                print self.torso_as.get_result()
+                
+                print "=====Hands pose to open a lot"
+                initial_pose_g = createPlayMotionGoal(self.get_motion_from_width_and_height(0.2, goal_message_field.target_pose.pose.position.z + 0.1), skip_planning=True)
+                self.play_motion_ac.send_goal_and_wait(initial_pose_g)
+                
+                print "====bend up to be safe"
+                torso_goal = createBendGoal(goal_message_field.target_pose.pose.position.z + 0.2)
+                self.torso_as.send_goal_and_wait(torso_goal)
+                print self.torso_as.get_result()
+                
+                dg = DisableGoal(duration=10.0)
+                self.speedl_as.send_goal(dg)
+                self.speedl_as.wait_for_result(rospy.Duration(0.1))
+                
+                print "\n\n===Move back to be safe"
+                straight_req = StraightRequest()
+                straight_req.enable = True
+                straight_req.meters = -0.8
+                self.straight_srv.call(straight_req)
+                
+                
+                self.grasped_object = False
+                self.current_goal.set_succeeded(result=self.as_result)
+                self.scene.remove_attached_object("hand_right_grasping_frame", "object_bbx")
+                
+            else:
+                rospy.logerr("No grasped object to place!!")
+                self.update_aborted("No grasped object to place!")
 
 
     def message_fields_ok(self):
@@ -526,3 +673,24 @@ class ObjectManipulationAS:
         print "Which got me a best_dist of " + str(best_dist)
         print "Which ends in the movement: " + self.distance_based_grasps.get(best_dist)
         return self.distance_based_grasps.get(best_dist)
+
+    def hypotenuse(self, a, b):
+        c = math.sqrt(a**2 + b**2)
+        return c
+    
+    def angle(self, c, a, b):
+        """C = hypotenuse"""
+        return math.acos((c**2 - b**2 - a**2)/(-2.0 * a * b))
+    
+    def get_angle_to_turn(self, x, y):
+        angle_to_turn = self.angle(y, x, self.hypotenuse(x, y))
+        print "x, y, angle_to_turn: "
+        print x
+        print y
+        print angle_to_turn
+        if y > 0.0: # our turn node takes turns clockwise as positive, this calculation always gives positive angles
+            angle_to_turn *= -1
+        print "After *-1"
+        print angle_to_turn
+        return angle_to_turn
+        
