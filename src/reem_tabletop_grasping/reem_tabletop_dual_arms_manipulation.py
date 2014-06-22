@@ -71,6 +71,8 @@ from odom_moving.srv import Straight, StraightRequest
 
 from speed_limit.msg import DisableGoal, DisableAction
 
+from control_msgs.msg import JointTrajectoryControllerState
+
 import moveit_commander
 from cartesian_goals import trajectoryConstructor
 
@@ -96,6 +98,8 @@ MOVE_GROUP_AS = '/move_group'
 STRAIGHT_SRV = '/straight_nav'
 TURN_SRV = '/turn_nav'
 SPEED_LIMIT_AS = '/speed_limit/disable'
+
+RIGHT_ARM_STATE_TOPIC = '/right_arm_controller/state'
 
 OFFSET_OVER_TABLE_PLACING = 0.08
 
@@ -164,6 +168,7 @@ class ObjectManipulationAS:
         rospy.loginfo("Connecting to speed limit disable AS...")
         self.speedl_as.wait_for_server()
         
+        
 #         rospy.loginfo("Creating trajectory constructor...")
 #         self.tC = trajectoryConstructor()
         
@@ -174,6 +179,10 @@ class ObjectManipulationAS:
 #         self.left_group = moveit_commander.MoveGroupCommander("left_arm")
         
         self.grasped_object = False
+        
+        # the summation of the errors of the right arm
+        # to know if we grasped should be bigger than this threshold
+        self.right_arm_error_th = 0.009
         
         # Grasp motion names
         self.pre_grasp = 'pre_grasp'
@@ -327,7 +336,11 @@ class ObjectManipulationAS:
             
             # Adapt hands closing distance to object width + 5cm on each side (min dist between objects)
             print "\n=====Hands pose to object width"
-            initial_pose_g = createPlayMotionGoal(self.get_motion_from_width_and_height(obj_bbox_dims[0] + 0.06, object_pose.pose.position.z), skip_planning=True)
+            tiniest_dim = 99.0
+            for dim in obj_bbox_dims:
+                if dim < tiniest_dim:
+                    tiniest_dim = dim
+            initial_pose_g = createPlayMotionGoal(self.get_motion_from_width_and_height(tiniest_dim + 0.06, object_pose.pose.position.z), skip_planning=True)
             self.play_motion_ac.send_goal_and_wait(initial_pose_g)
             
             # Bend torso up as necessary
@@ -383,7 +396,7 @@ class ObjectManipulationAS:
             
             # Close hands to object width - 3cm (empyrical)
             print "\n===Closing hands for grasp"
-            initial_pose_g = createPlayMotionGoal(self.get_motion_from_width_and_height(obj_bbox_dims[0] - 0.085, object_pose.pose.position.z), skip_planning=True)
+            initial_pose_g = createPlayMotionGoal(self.get_motion_from_width_and_height(tiniest_dim - 0.085, object_pose.pose.position.z), skip_planning=True)
             self.play_motion_ac.send_goal_and_wait(initial_pose_g)
             
             # Attaching object to hand
@@ -407,9 +420,14 @@ class ObjectManipulationAS:
             straight_req.meters = -advance_dist
             self.straight_srv.call(straight_req)
         
-            self.grasped_object = True
             
-            self.current_goal.set_succeeded(result=self.as_result)
+            if self.grasped_from_joint_error():
+                self.grasped_object = True    
+                self.current_goal.set_succeeded(result=self.as_result)
+            else:
+                self.grasped_object = False    
+                self.update_aborted("Failed grasping, object does not seem to be in between hands")
+            
 
     def detect_object(self, target_pose):
         """Given a posestamped target_pose search the closer cluster to that pose"""
@@ -492,6 +510,27 @@ class ObjectManipulationAS:
             else:
                 rospy.logerr("No grasped object to place!!")
                 self.update_aborted("No grasped object to place!")
+
+
+    def grasped_from_joint_error(self):
+        """From reading the current error in the state of the motors in the right arm
+        we deduce if we have grasped. there should be some error bigger than a threshold
+        True if grasped, False if not"""
+        msg = rospy.wait_for_message(RIGHT_ARM_STATE_TOPIC, JointTrajectoryControllerState)
+        sum_error = 0.0
+        for joint_err_val in msg.error.positions:
+            sum_error += abs(joint_err_val)
+        print "\n///////threshold is: "
+        print self.right_arm_error_th
+        print "sum_error is:"
+        print sum_error
+        
+        if sum_error > self.right_arm_error_th:
+            print "We overpassed error... so we grasped!"
+            return True
+
+        print "We didnt overpass error... so we didnt grasp :("
+        return False
 
 
     def message_fields_ok(self):
