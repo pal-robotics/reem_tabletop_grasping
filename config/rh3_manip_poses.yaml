@@ -1,0 +1,50 @@
+play_motion:
+  motions:
+    pre_grasp:
+      joints: 
+              ['arm_right_1_joint', 'arm_right_2_joint', 'arm_right_3_joint',
+              'arm_right_4_joint', 'arm_right_5_joint', 'arm_right_6_joint',
+              'arm_right_7_joint',
+              'arm_left_1_joint', 'arm_left_2_joint', 'arm_left_3_joint',
+              'arm_left_4_joint', 'arm_left_5_joint', 'arm_left_6_joint',
+              'arm_left_7_joint']
+      points:
+      - positions: 
+              [0.934186234366, 0.0384229614136, -1.28266429768,
+              0.804876373305, 0.132163508053, 0.886241414735,
+              0.687621553401,
+              0.934186234366, 0.0384229614136, -1.28266429768,
+              0.804876373305, 0.132163508053, 0.886241414735,
+              0.687621553401 ]
+        time_from_start: 0.0
+      meta:
+        name: pre_grasp
+        usage: posture
+        description: Initial pose for dual arms grasping. Arms up and parallel. 34cm between fingers in RH2.
+
+    grasp_0cm:
+      joints:
+              ['arm_left_1_joint', 'arm_left_2_joint', 'arm_left_3_joint', 'arm_left_4_joint', 'arm_left_5_joint', 'arm_left_6_joint', 'arm_left_7_joint', 'arm_right_1_joint', 'arm_right_2_joint', 'arm_right_3_joint', 'arm_right_4_joint', 'arm_right_5_joint', 'arm_right_6_joint', 'arm_right_7_joint']
+      points:
+      - positions:
+              [0.8854549531152388, -0.14371955851447327, -1.2831241817031314, 0.7835208414028494, 0.12993297905367154, 0.4899742508080863, 0.5700432805566208, 0.879998127577188, -0.22966405375139975, -1.2294914613334356, 0.7570975705163852, 0.13005168100220968, 0.2729003451487427, 0.5284930331087128]
+        time_from_start: 0.0
+      meta:
+        name: grasp_0cm
+        usage: posture
+        description: Posture generated with poses_grabber
+
+
+    grasp_24cm:
+      joints:
+              ['arm_left_1_joint', 'arm_left_2_joint', 'arm_left_3_joint', 'arm_left_4_joint', 'arm_left_5_joint', 'arm_left_6_joint', 'arm_left_7_joint', 'arm_right_1_joint', 'arm_right_2_joint', 'arm_right_3_joint', 'arm_right_4_joint', 'arm_right_5_joint', 'arm_right_6_joint', 'arm_right_7_joint']
+      points:
+      - positions:
+              [0.8899954825905128, 0.07631038276768631, -1.279998430647198, 0.7999816555381938, 0.12999689548749976, 0.5200012783286766, 0.6499981738161763, 0.8791319975930083, 0.043206756089742976, -1.2801901815244583, 0.7990145359830536, 0.12999689548749976, 0.49002903632279626, 0.5699702332036743]
+        time_from_start: 0.0
+      meta:
+        name: grasp_24cm
+        usage: posture
+        description: 24cm top, 30cm bot.
+
+
