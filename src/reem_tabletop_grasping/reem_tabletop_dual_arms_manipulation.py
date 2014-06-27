@@ -68,6 +68,7 @@ from moveit_msgs.srv import ExecuteKnownTrajectory, GetCartesianPath
 from moveit_msgs.msg._MoveGroupAction import MoveGroupAction
 from odom_moving.srv import Turn, TurnRequest
 from odom_moving.srv import Straight, StraightRequest
+from pal_control_msgs.srv import CurrentLimit, CurrentLimitRequest
 
 from speed_limit.msg import DisableGoal, DisableAction
 
@@ -98,6 +99,7 @@ MOVE_GROUP_AS = '/move_group'
 STRAIGHT_SRV = '/straight_nav'
 TURN_SRV = '/turn_nav'
 SPEED_LIMIT_AS = '/speed_limit/disable'
+CURRENT_LIMIT_SRV = '/current_limit_controller/set_current_limit'
 
 RIGHT_ARM_STATE_TOPIC = '/right_arm_controller/state'
 
@@ -168,21 +170,16 @@ class ObjectManipulationAS:
         rospy.loginfo("Connecting to speed limit disable AS...")
         self.speedl_as.wait_for_server()
         
+        rospy.loginfo("Trying to connect to Current Limit service'" + CURRENT_LIMIT_SRV + "'...")
+        self.current_limit_srv = rospy.ServiceProxy(CURRENT_LIMIT_SRV, CurrentLimit)
+        self.current_limit_srv.wait_for_service()
         
-#         rospy.loginfo("Creating trajectory constructor...")
-#         self.tC = trajectoryConstructor()
-        
-#         moveit_commander.roscpp_initialize(sys.argv)
-#         self.robot = moveit_commander.RobotCommander()
-#         self.scene = moveit_commander.PlanningSceneInterface()
-#         self.right_group = moveit_commander.MoveGroupCommander("right_arm")
-#         self.left_group = moveit_commander.MoveGroupCommander("left_arm")
         
         self.grasped_object = False
         
         # the summation of the errors of the right arm
         # to know if we grasped should be bigger than this threshold
-        self.right_arm_error_th = 0.009
+        self.right_arm_error_th = 0.020
         
         # Grasp motion names
         self.pre_grasp = 'pre_grasp'
@@ -193,11 +190,11 @@ class ObjectManipulationAS:
         self.min_torso_rads = 0.61
         self.max_torso_rads = -0.18
         # X distance is 36cm at 0.00 rad and 43cm at 0.61 rad, so a variation of 7cm
-        self.x_min = 0.36 - 0.09 # Magic calibration distance
-        self.x_max = 0.43 - 0.09
+        self.x_min = 0.34 - 0.1  # Magic calibration distance
+        self.x_max = 0.41 - 0.1
         self.x_dist_variation = self.x_max - self.x_min 
-        # Z distance on 0.00 rad is 107cm and on 0.61 rad is 74cm 
-        self.z_min = 0.74
+        # Z distance on 0.00 rad is 107cm and on 0.61 rad is 77cm 
+        self.z_min = 0.77
         self.z_max = 1.07
         self.z_dist_variation = self.z_max - self.z_min
         self.distance_based_grasps = {
@@ -209,9 +206,9 @@ class ObjectManipulationAS:
                                       0.12 : 'grasp_12cm',
                                       0.10 : 'grasp_10cm',
                                       0.08 : 'grasp_8cm',
-                                      0.06 : 'grasp_6cm',
-                                      0.04 : 'grasp_4cm',
-                                      0.02 : 'grasp_2cm',
+#                                       0.06 : 'grasp_6cm',
+#                                       0.04 : 'grasp_4cm',
+#                                       0.02 : 'grasp_2cm',
                                       0.00 : 'grasp_0cm'
                                       }
         
@@ -237,10 +234,6 @@ class ObjectManipulationAS:
         if self.current_goal:
             goal.set_rejected()  # "Server busy"
             return
-        # TODO: Check if pose is not empty, if it is, reject
-#         elif len(self.last_clusters.objects) - 1 < goal.get_goal().target_id:
-#             goal.set_rejected() # "No objects to grasp were received on the objects topic."
-#             return
         else:
             #store and accept new goal
             self.current_goal = goal
@@ -280,9 +273,6 @@ class ObjectManipulationAS:
             object_pose, obj_bbox_dims = self.detect_object(goal_message_field.target_pose)
             
             
-            # TESTING HACK
-            #object_pose.pose.position.x = 0.29
-            
             print "object_pose is: " + str(object_pose) + "\n"
             print "objects dims are: " + str(obj_bbox_dims) + "\n"
             
@@ -298,10 +288,8 @@ class ObjectManipulationAS:
             
             if object_pose.pose.position.y > 0.0:
                 print "\n\n~~~~~~Object to the LEFT~~~~~~~~~"
-                print "So we need to turn -X.XX degrees (negative)"
             elif object_pose.pose.position.y < 0.0:
                 print "\n\n~~~~~~Object to the RIGHT~~~~~~~~~"
-                print "So we need to turn X.XX degrees (positive)"
 
             if abs(object_pose.pose.position.y) > 0.02: # minimum threshold to rotate in cm
                 # Calculate how much to turn to look in front
@@ -311,7 +299,7 @@ class ObjectManipulationAS:
                     turn_req = TurnRequest()
                     turn_req.enable = True
                     if angle_to_turn > 0.0:
-                        turn_req.degrees = math.degrees(angle_to_turn) - 1.5 # offset that the robot rotates too much
+                        turn_req.degrees = math.degrees(angle_to_turn) - 1.5 # offset that the robot rotates too much 
                     else:
                         turn_req.degrees = math.degrees(angle_to_turn) + 1.5 # offset that the robot rotates too much
                     print "\nSending turn request: " + str(turn_req)
@@ -336,11 +324,11 @@ class ObjectManipulationAS:
             
             # Adapt hands closing distance to object width + 5cm on each side (min dist between objects)
             print "\n=====Hands pose to object width"
-            tiniest_dim = 99.0
+            biggest_dim = 0.0
             for dim in obj_bbox_dims:
-                if dim < tiniest_dim:
-                    tiniest_dim = dim
-            initial_pose_g = createPlayMotionGoal(self.get_motion_from_width_and_height(tiniest_dim + 0.06, object_pose.pose.position.z), skip_planning=True)
+                if dim > biggest_dim:
+                    biggest_dim = dim
+            initial_pose_g = createPlayMotionGoal(self.get_motion_from_width_and_height(biggest_dim + 0.06, object_pose.pose.position.z), skip_planning=True)
             self.play_motion_ac.send_goal_and_wait(initial_pose_g)
             
             # Bend torso up as necessary
@@ -381,22 +369,28 @@ class ObjectManipulationAS:
             print obj_bbox_dimscheck
 
 
-
-
-
             # Add box representing the obstacle
             self.scene.add_box("object_bbx", object_pose,
                                (obj_bbox_dims[0], obj_bbox_dims[1], obj_bbox_dims[2]))
             
             # Bend torso down as necessary
             print "\n===Bending torso down to the necessary height"
-            torso_goal = createBendGoal(object_pose.pose.position.z + 0.03)
+            torso_goal = createBendGoal(object_pose.pose.position.z + 0.06)
             self.torso_as.send_goal_and_wait(torso_goal)
             print self.torso_as.get_result()
             
+            # Soften the right arm so we dont crush objects
+            print "\n===Softening right arm joints to not crush objects"
+            self.soften_right_arm()
+            
+            # Close hands first to 8cm (so we dont close so fast)
+            print "\n===closing hands first to 8cm"
+            initial_pose_g = createPlayMotionGoal('grasp_8cm', skip_planning=True)
+            self.play_motion_ac.send_goal_and_wait(initial_pose_g)
+            
             # Close hands to object width - 3cm (empyrical)
             print "\n===Closing hands for grasp"
-            initial_pose_g = createPlayMotionGoal(self.get_motion_from_width_and_height(tiniest_dim - 0.085, object_pose.pose.position.z), skip_planning=True)
+            initial_pose_g = createPlayMotionGoal('grasp_0cm', skip_planning=True)
             self.play_motion_ac.send_goal_and_wait(initial_pose_g)
             
             # Attaching object to hand
@@ -425,7 +419,9 @@ class ObjectManipulationAS:
                 self.grasped_object = True    
                 self.current_goal.set_succeeded(result=self.as_result)
             else:
-                self.grasped_object = False    
+                self.grasped_object = False
+                print "\n\n===Returning right arm currents to normal"
+                self.return_right_arm_to_normal()
                 self.update_aborted("Failed grasping, object does not seem to be in between hands")
             
 
@@ -456,7 +452,7 @@ class ObjectManipulationAS:
         # shift object pose up by halfway, clustering code gives obj frame on the bottom because of too much noise on the table cropping (2 1pixel lines behind the objects)
         # TODO remove this hack, fix it in table filtering
         object_pose.pose.position.z += obj_bbox_dims[2] / 2.0
-        
+        object_pose.pose.position.y += 0.03 # RH3 needs an offset as of today to actually grasp the objects
         return object_pose, obj_bbox_dims
 
 
@@ -479,7 +475,7 @@ class ObjectManipulationAS:
                 
                 print "====BEND TO THE DESIRED Z"
                 print "goal message: " + str(goal_message_field)
-                torso_goal = createBendGoal(goal_message_field.target_pose.pose.position.z + 0.1)
+                torso_goal = createBendGoal(goal_message_field.target_pose.pose.position.z + 0.05)
                 self.torso_as.send_goal_and_wait(torso_goal)
                 print self.torso_as.get_result()
                 
@@ -505,7 +501,10 @@ class ObjectManipulationAS:
                 
                 self.grasped_object = False
                 self.current_goal.set_succeeded(result=self.as_result)
-                self.scene.remove_attached_object("hand_right_grasping_frame", "object_bbx")
+                self.scene.remove_attached_object("hand_right_index_3_link", "object_bbx")
+                
+                print "\n\n===Returning right arm currents to normal"
+                self.return_right_arm_to_normal()
                 
             else:
                 rospy.logerr("No grasped object to place!!")
@@ -532,6 +531,30 @@ class ObjectManipulationAS:
         print "We didnt overpass error... so we didnt grasp :("
         return False
 
+
+    def soften_right_arm(self):
+        """Lower the current of some right arm joints to not crush objects
+        and be able to detect if we grasped them"""
+        req = CurrentLimitRequest()
+        req.actuator_name = 'arm_right_4_motor'
+        req.current_limit = 0.5
+        self.current_limit_srv.call(req)
+        req = CurrentLimitRequest()
+        req.actuator_name = 'arm_right_2_motor'
+        req.current_limit = 0.5
+        self.current_limit_srv.call(req)
+        
+    def return_right_arm_to_normal(self):
+        """Give back the original current of joints"""
+        req = CurrentLimitRequest()
+        req.actuator_name = 'arm_right_4_motor'
+        req.current_limit = 1.0
+        self.current_limit_srv.call(req)
+        req = CurrentLimitRequest()
+        req.actuator_name = 'arm_right_2_motor'
+        req.current_limit = 1.0
+        self.current_limit_srv.call(req)
+         
 
     def message_fields_ok(self):
         """Check if the minimal fields for the message are fulfilled"""
@@ -563,22 +586,6 @@ class ObjectManipulationAS:
         else:
             self.current_goal.set_aborted(result=manipulation_result)
 
-    def generate_grasps(self, pose, width):
-        """Send request to block grasp generator service"""
-        goal = GenerateGraspsGoal()
-        goal.pose = pose.pose
-        goal.width = width
-        grasp_options = GraspGeneratorOptions()
-        grasp_options.grasp_axis = GraspGeneratorOptions.GRASP_AXIS_Y
-        grasp_options.grasp_direction = GraspGeneratorOptions.GRASP_DIRECTION_DOWN
-        grasp_options.grasp_rotation = GraspGeneratorOptions.GRASP_ROTATION_HALF
-        goal.options.append(grasp_options)
-        self.grasps_ac.send_goal(goal)
-        if DEBUG_MODE:
-            rospy.loginfo("Sent goal, waiting:\n" + str(goal))
-        self.grasps_ac.wait_for_result()
-        grasp_list = self.grasps_ac.get_result().grasps
-        return grasp_list
 
     def get_id_of_closest_cluster_to_pose(self, input_pose):
         """Returns the id of the closest cluster to the pose provided (in Pose or PoseStamped)
@@ -614,28 +621,6 @@ class ObjectManipulationAS:
         rospy.loginfo("Closest id is: " + str(closest_id) + " at " + str(closest_pose))
         return closest_id, (closest_object_points, closest_bbox_dims, closest_bbox_dims, closest_pose)
 
-    def get_pose_of_closest_table(self, input_pose):
-        """Get the PoseStamped and the Table msg of the closest table to adjust height of the placing"""
-        closest_table_posestamped = None
-        closest_tablemsg = None
-        closest_distance_z = 99999.9
-        for mytable in self.last_tables.tables:
-            table_posestamped = PoseStamped(header=mytable.header, pose=mytable.pose)
-            if table_posestamped.header.frame_id != "base_link":
-                self.tf_listener.waitForTransform("base_link", table_posestamped.header.frame_id, table_posestamped.header.stamp, rospy.Duration(5))
-                table_pose = self.tf_listener.transformPose("base_link", table_posestamped)
-            else:
-                table_pose = table_posestamped
-            if closest_table_posestamped == None:
-                closest_table_posestamped = table_pose
-                closest_distance_z = abs(table_pose.pose.position.z - input_pose.position.z)
-            else:
-                if abs(table_pose.pose.position.z - input_pose.position.z) < closest_distance_z:
-                    closest_distance_z = abs(table_pose.pose.position.z - input_pose.position.z)
-                    closest_table_posestamped = table_pose
-                    closest_tablemsg = mytable
-        rospy.loginfo("Closest table is at pose: " + str(closest_table_posestamped))
-        return closest_tablemsg, closest_table_posestamped
 
     def wait_for_recognized_array(self, wait_time=6, timeout_time=10):
         """Ask for depth images until we get a recognized array
@@ -662,30 +647,6 @@ class ObjectManipulationAS:
         else:
             return True
 
-    def wait_for_tables_array(self, wait_time=6, timeout_time=10):
-        """Ask for depth images until we get a table array
-        wait for wait_time between depth throttle calls
-        stop if timeout_time is achieved
-        If we don't find it in the correspondent time return false, true otherwise"""
-        initial_time = rospy.Time.now()
-        self.last_tables = None
-        count = 0
-        num_calls = 1
-        self.depth_service.call(EmptyRequest())
-        rospy.loginfo("Depth throttle server call #" + str(num_calls))
-        rospy.loginfo("Waiting for a table array...")
-        while rospy.Time.now() - initial_time < rospy.Duration(timeout_time) and self.last_tables == None:
-            rospy.sleep(0.1)
-            count += 1
-
-            if count >= wait_time / 10:
-                self.depth_service.call(EmptyRequest())
-                num_calls += 1
-                rospy.loginfo("Depth throttle server call #" + str(num_calls))
-        if self.last_tables == None:
-            return False
-        else:
-            return True
 
     def get_motion_from_width_and_height(self, width, height):
         """Given a width of an object get the motion to attain that distance between

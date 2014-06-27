@@ -27,12 +27,98 @@ play_motion:
               ['arm_left_1_joint', 'arm_left_2_joint', 'arm_left_3_joint', 'arm_left_4_joint', 'arm_left_5_joint', 'arm_left_6_joint', 'arm_left_7_joint', 'arm_right_1_joint', 'arm_right_2_joint', 'arm_right_3_joint', 'arm_right_4_joint', 'arm_right_5_joint', 'arm_right_6_joint', 'arm_right_7_joint']
       points:
       - positions:
-              [0.8854549531152388, -0.14371955851447327, -1.2831241817031314, 0.7835208414028494, 0.12993297905367154, 0.4899742508080863, 0.5700432805566208, 0.879998127577188, -0.22966405375139975, -1.2294914613334356, 0.7570975705163852, 0.13005168100220968, 0.2729003451487427, 0.5284930331087128]
+              [0.8217857946697185, -0.12038740124867697, -1.3335930125980326, 1.093256033441353, 0.669944666630143, 0.7038842929929326, 0.034085721068682795, 
+              0.8006336498216797, -0.17261455153476823, -1.3433914824260322, 1.0616746639565875, 0.6700542376595628, 0.7659060611041107, 0.19997169415073324]
         time_from_start: 0.0
       meta:
         name: grasp_0cm
         usage: posture
         description: Posture generated with poses_grabber
+
+    grasp_8cm:
+      joints:
+              ['arm_left_1_joint', 'arm_left_2_joint', 'arm_left_3_joint', 'arm_left_4_joint', 'arm_left_5_joint', 'arm_left_6_joint', 'arm_left_7_joint', 'arm_right_1_joint', 'arm_right_2_joint', 'arm_right_3_joint', 'arm_right_4_joint', 'arm_right_5_joint', 'arm_right_6_joint', 'arm_right_7_joint']
+      points:
+      - positions:
+              [0.8899954825905128, -0.0700026455039546, -1.2800176057349242, 0.8000008306259199, 0.12999689548749976, 0.4899742508080864, 0.5700250187183842, 0.8791626776157115, -0.12367722740440482, -1.2802093566121844, 0.7988803103689714, 0.12999689548749976, 0.4900153399441188, 0.5699656677441152]
+        time_from_start: 0.0
+      meta:
+        name: grasp_8cm
+        usage: posture
+        description: 8cm top, 13cm bot.
+
+    grasp_10cm:
+      joints:
+              ['arm_left_1_joint', 'arm_left_2_joint', 'arm_left_3_joint', 'arm_left_4_joint', 'arm_left_5_joint', 'arm_left_6_joint', 'arm_left_7_joint', 'arm_right_1_joint', 'arm_right_2_joint', 'arm_right_3_joint', 'arm_right_4_joint', 'arm_right_5_joint', 'arm_right_6_joint', 'arm_right_7_joint']
+      points:
+      - positions:
+              [0.8899954825905128, -0.049999270701457245, -1.279998430647198, 0.7999816555381938, 0.12999689548749976, 0.4899742508080864, 0.5700250187183842, 0.8791319975930083, -0.09683220753909011, -1.2802093566121844, 0.7988994854566974, 0.12999689548749976, 0.49002903632279626, 0.5699702332036743]
+        time_from_start: 0.0
+      meta:
+        name: grasp_10cm
+        usage: posture
+        description: 10cm top, 15cm bot.
+
+    grasp_12cm:
+      joints:
+              ['arm_left_1_joint', 'arm_left_2_joint', 'arm_left_3_joint', 'arm_left_4_joint', 'arm_left_5_joint', 'arm_left_6_joint', 'arm_left_7_joint', 'arm_right_1_joint', 'arm_right_2_joint', 'arm_right_3_joint', 'arm_right_4_joint', 'arm_right_5_joint', 'arm_right_6_joint', 'arm_right_7_joint']
+      points:
+      - positions:
+              [0.8899954825905128, -0.02683585356052856, -1.279998430647198, 0.7999816555381938, 0.12999689548749976, 0.4899742508080864, 0.5700250187183842, 0.8791319975930083, -0.07681349272524116, -1.2802093566121844, 0.7988994854566974, 0.12999689548749976, 0.49002903632279626, 0.5699702332036743]
+        time_from_start: 0.0
+      meta:
+        name: grasp_12cm
+        usage: posture
+        description: 12cm top, 17.5cm bot.
+
+    grasp_14cm:
+      joints:
+              ['arm_left_1_joint', 'arm_left_2_joint', 'arm_left_3_joint', 'arm_left_4_joint', 'arm_left_5_joint', 'arm_left_6_joint', 'arm_left_7_joint', 'arm_right_1_joint', 'arm_right_2_joint', 'arm_right_3_joint', 'arm_right_4_joint', 'arm_right_5_joint', 'arm_right_6_joint', 'arm_right_7_joint']
+      points:
+      - positions:
+              [0.8899801425791611, -0.0068171387466796005, -1.279998430647198, 0.7999816555381938, 0.12998776456838146, 0.5210193758103691, 0.6529794189083072, 0.8791319975930083, -0.05366541559566407, -1.2802093566121844, 0.7989186605444234, 0.12998776456838146, 0.49002903632279626, 0.5699702332036743]
+        time_from_start: 0.0
+      meta:
+        name: grasp_14cm
+        usage: posture
+        description: 14cm top, 19.5 bot
+
+    grasp_17cm:
+      joints:
+              ['arm_left_1_joint', 'arm_left_2_joint', 'arm_left_3_joint', 'arm_left_4_joint', 'arm_left_5_joint', 'arm_left_6_joint', 'arm_left_7_joint', 'arm_right_1_joint', 'arm_right_2_joint', 'arm_right_3_joint', 'arm_right_4_joint', 'arm_right_5_joint', 'arm_right_6_joint', 'arm_right_7_joint']
+      points:
+      - positions:
+              [0.8899954825905128, 0.013186236055817754, -1.279998430647198, 0.7999816555381938, 0.12998776456838146, 0.51998301649044, 0.6500164356544129, 0.8791319975930083, -0.02680505571899776, -1.2802093566121844, 0.7989378356321495, 0.12999689548749976, 0.49002903632279626, 0.5699702332036743]
+        time_from_start: 0.0
+      meta:
+        name: grasp_17cm
+        usage: posture
+        description: 17cm top, 22cm bot.
+
+    grasp_19cm:
+      joints:
+              ['arm_left_1_joint', 'arm_left_2_joint', 'arm_left_3_joint', 'arm_left_4_joint', 'arm_left_5_joint', 'arm_left_6_joint', 'arm_left_7_joint', 'arm_right_1_joint', 'arm_right_2_joint', 'arm_right_3_joint', 'arm_right_4_joint', 'arm_right_5_joint', 'arm_right_6_joint', 'arm_right_7_joint']
+      points:
+      - positions:
+              [0.8899954825905128, 0.03315893083561189, -1.279998430647198, 0.7999816555381938, 0.12999689548749976, 0.5200012783286766, 0.6499981738161763, 0.8791473376043599, -0.006832360939203627, -1.2801901815244583, 0.7989761858076015, 0.12998776456838146, 0.49002903632279626, 0.5699702332036743]
+        time_from_start: 0.0
+      meta:
+        name: grasp_19cm
+        usage: posture
+        description: 19.5cm top, 24cm bot.
+
+    grasp_22cm:
+      joints:
+              ['arm_left_1_joint', 'arm_left_2_joint', 'arm_left_3_joint', 'arm_left_4_joint', 'arm_left_5_joint', 'arm_left_6_joint', 'arm_left_7_joint', 'arm_right_1_joint', 'arm_right_2_joint', 'arm_right_3_joint', 'arm_right_4_joint', 'arm_right_5_joint', 'arm_right_6_joint', 'arm_right_7_joint']
+      points:
+      - positions:
+              [0.8899954825905128, 0.053162305638109246, -1.279998430647198, 0.7999816555381938, 0.12999689548749976, 0.5200012783286766, 0.6499981738161763, 0.8791473376043599, 0.016361736224428276, -1.2801901815244583, 0.7989953608953275, 0.12999689548749976, 0.49002903632279626, 0.5699702332036743]
+        time_from_start: 0.0
+      meta:
+        name: grasp_22cm
+        usage: posture
+        description: 22cm top, 27cm bot.
+
 
 
     grasp_24cm:
@@ -48,3 +134,14 @@ play_motion:
         description: 24cm top, 30cm bot.
 
 
+    right_arm_closer:
+      joints:
+              ['arm_left_1_joint', 'arm_left_2_joint', 'arm_left_3_joint', 'arm_left_4_joint', 'arm_left_5_joint', 'arm_left_6_joint', 'arm_left_7_joint', 'arm_right_1_joint', 'arm_right_2_joint', 'arm_right_3_joint', 'arm_right_4_joint', 'arm_right_5_joint', 'arm_right_6_joint', 'arm_right_7_joint']
+      points:
+      - positions:
+              [0.8026365606037682, -0.18764776265934435, -1.3334779620716766, 1.080159448524477, 0.6693602878065706, 0.890296572252963, 0.19808159389324126, 0.8026365606037682, -0.18764776265934435, -1.3334779620716766, 1.080159448524477, 0.6693602878065706, 0.890296572252963, 0.19808159389324126]
+        time_from_start: 0.0
+      meta:
+        name: right_arm_closer
+        usage: posture
+        description: Posture generated with poses_grabber
