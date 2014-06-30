@@ -433,8 +433,16 @@ class ObjectManipulationAS:
         # Search closer cluster
         # transform pose to base_link if needed
         if target_pose.header.frame_id != "base_link":
-            self.tf_listener.waitForTransform("base_link", target_pose.header.frame_id, target_pose.header.stamp, rospy.Duration(5))
-            object_to_grasp_pose = self.tf_listener.transformPose("base_link", target_pose)
+            n_tries = 3
+            while n_tries > 0:
+                try:
+                    print "Try " + str(n_tries) + " of transforming... (5s wait for transform)"
+                    target_pose.header.stamp = rospy.Time.now()
+                    self.tf_listener.waitForTransform("base_link", target_pose.header.frame_id, target_pose.header.stamp, rospy.Duration(5))
+                    object_to_grasp_pose = self.tf_listener.transformPose("base_link", target_pose)
+                    n_tries = 0
+                except:
+                    n_tries -= 1
         else:
             object_to_grasp_pose = target_pose.pose
 
@@ -505,6 +513,12 @@ class ObjectManipulationAS:
                 
                 print "\n\n===Returning right arm currents to normal"
                 self.return_right_arm_to_normal()
+                
+                            
+                # MOVE ARMS TO HOME
+                print "\n====Moving arms to home" 
+                home_g = createPlayMotionGoal("home")
+                self.play_motion_ac.send_goal_and_wait(home_g)
                 
             else:
                 rospy.logerr("No grasped object to place!!")
