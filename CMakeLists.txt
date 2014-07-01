@@ -33,3 +33,9 @@ install (PROGRAMS scripts/reem_object_manipulation_as.py
                   scripts/send_place.py
                   scripts/send_pick_and_place.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION})
+
+install(DIRECTORY
+   launch
+   config
+   DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}
+ )
