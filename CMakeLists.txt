@@ -27,11 +27,13 @@ catkin_package(
 )
 
 install (PROGRAMS scripts/reem_object_manipulation_as.py
+                  scripts/reem_object_manipulation_dual_arms_as.py
                   scripts/look_down.py
                   scripts/open_hands.py
                   scripts/send_pick.py
                   scripts/send_place.py
                   scripts/send_pick_and_place.py
+                  scripts/depth_throtle_server.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION})
 
 install(DIRECTORY
