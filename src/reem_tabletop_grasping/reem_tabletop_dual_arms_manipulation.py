@@ -82,6 +82,8 @@ DEBUG_MODE = True
 if DEBUG_MODE:
     from visualizing_functions import publish_grasps_as_poses
 
+RH2 = True
+
 RECOGNIZED_OBJECT_ARRAY_TOPIC = '/recognized_object_array'
 TABLES_ARRAY_TOPIC = '/table_array'
 TO_BE_GRASPED_OBJECT_POSE_TOPIC = '/to_grasp_object_pose'
@@ -170,9 +172,13 @@ class ObjectManipulationAS:
         rospy.loginfo("Connecting to speed limit disable AS...")
         self.speedl_as.wait_for_server()
         
-        rospy.loginfo("Trying to connect to Current Limit service'" + CURRENT_LIMIT_SRV + "'...")
-        self.current_limit_srv = rospy.ServiceProxy(CURRENT_LIMIT_SRV, CurrentLimit)
-        self.current_limit_srv.wait_for_service()
+        if RH2:
+            print "We are on RH2 we are skipping current control limit (as for 3/7/14)"
+        if not RH2:
+            print "We are not in RH2 so we current control the right arm"
+            rospy.loginfo("Trying to connect to Current Limit service'" + CURRENT_LIMIT_SRV + "'...")
+            self.current_limit_srv = rospy.ServiceProxy(CURRENT_LIMIT_SRV, CurrentLimit)
+            self.current_limit_srv.wait_for_service()
         
         
         self.grasped_object = False
@@ -190,8 +196,12 @@ class ObjectManipulationAS:
         self.min_torso_rads = 0.61
         self.max_torso_rads = -0.18
         # X distance is 36cm at 0.00 rad and 43cm at 0.61 rad, so a variation of 7cm
-        self.x_min = 0.34 - 0.1  # Magic calibration distance
-        self.x_max = 0.41 - 0.1
+        if RH2:
+            self.x_min = 0.34 + 0.04  # Magic calibration distance
+            self.x_max = 0.41 + 0.04
+        else:
+            self.x_min = 0.34 - 0.1  # Magic calibration distance
+            self.x_max = 0.41 - 0.1
         self.x_dist_variation = self.x_max - self.x_min 
         # Z distance on 0.00 rad is 107cm and on 0.61 rad is 77cm 
         self.z_min = 0.77
@@ -220,6 +230,7 @@ class ObjectManipulationAS:
         self.current_goal = None
 
         rospy.loginfo("Starting '" + OBJECT_MANIPULATION_AS + "' Action Server!")
+        print "Starting '" + OBJECT_MANIPULATION_AS + "' Action Server!"
         self.grasp_obj_as.start()
 
     def objects_callback(self, data):
@@ -460,7 +471,7 @@ class ObjectManipulationAS:
         # shift object pose up by halfway, clustering code gives obj frame on the bottom because of too much noise on the table cropping (2 1pixel lines behind the objects)
         # TODO remove this hack, fix it in table filtering
         object_pose.pose.position.z += obj_bbox_dims[2] / 2.0
-        object_pose.pose.position.y += 0.03 # RH3 needs an offset as of today to actually grasp the objects
+        #object_pose.pose.position.y += 0.03 # RH3 needs an offset as of today to actually grasp the objects
         return object_pose, obj_bbox_dims
 
 
@@ -552,22 +563,26 @@ class ObjectManipulationAS:
         req = CurrentLimitRequest()
         req.actuator_name = 'arm_right_4_motor'
         req.current_limit = 0.5
-        self.current_limit_srv.call(req)
+        if not RH2:
+            self.current_limit_srv.call(req)
         req = CurrentLimitRequest()
         req.actuator_name = 'arm_right_2_motor'
         req.current_limit = 0.5
-        self.current_limit_srv.call(req)
+        if not RH2:
+            self.current_limit_srv.call(req)
         
     def return_right_arm_to_normal(self):
         """Give back the original current of joints"""
         req = CurrentLimitRequest()
         req.actuator_name = 'arm_right_4_motor'
         req.current_limit = 1.0
-        self.current_limit_srv.call(req)
+        if not RH2:
+            self.current_limit_srv.call(req)
         req = CurrentLimitRequest()
         req.actuator_name = 'arm_right_2_motor'
         req.current_limit = 1.0
-        self.current_limit_srv.call(req)
+        if not RH2:
+            self.current_limit_srv.call(req)
          
 
     def message_fields_ok(self):
