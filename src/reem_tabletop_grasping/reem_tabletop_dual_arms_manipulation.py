@@ -41,7 +41,7 @@ import math
 import rospy
 import tf
 from actionlib import ActionServer, SimpleActionClient
-from geometry_msgs.msg import PoseArray, Pose, Point, PoseStamped, Quaternion
+from geometry_msgs.msg import PoseArray, Pose, Point, PoseStamped, Quaternion, PointStamped
 from std_msgs.msg import Header
 from std_srvs.srv import Empty, EmptyRequest
 # own imports
@@ -482,28 +482,50 @@ class ObjectManipulationAS:
             self.as_result = ObjectManipulationResult()
             goal_message_field = self.current_goal.get_goal()
             
-            if self.grasped_object:
+            if self.grasped_object or True:
+                print "Moving head down"
+                look_down_goal = createHeadGoal(0.0, 0.5, time=2.0)
+                self.head_as.send_goal_and_wait(look_down_goal)
+                
+                if not self.wait_for_tables_array(wait_time=5, timeout_time=10):  # wait until we get clusters published
+                    self.update_aborted("Failed detecting tables")
+                
+                closest_tablemsg, closest_table_posestamped, closest_table_x_border = self.get_pose_of_closest_table(goal_message_field.target_pose.pose)
+                print "closest_tablemsg: " + str(closest_tablemsg)
+                print "closest_table_posestamped: " + str(closest_table_posestamped)
+                print "closest convex hull of table x: " + str(closest_table_x_border)
+                if DEBUG_MODE:
+                    ps = PoseStamped()
+                    ps.header.frame_id = "base_link"
+                    ps.pose.position.x = closest_table_x_border
+                    ps.pose.position.z = 1.0
+                    ps.pose.orientation = Quaternion(0.0, 0.0, 0.0, 1.0)
+                    self.to_grasp_object_pose_pub.publish(ps)
+                
                 dg = DisableGoal(duration=10.0)
                 self.speedl_as.send_goal(dg)
                 self.speedl_as.wait_for_result(rospy.Duration(0.1))
                 print "\n\n===Move forward to get to the real POI"
                 straight_req = StraightRequest()
                 straight_req.enable = True
-                straight_req.meters = 0.8
+                straight_req.meters = closest_table_x_border - 0.1
                 self.straight_srv.call(straight_req)
                 
                 print "====BEND TO THE DESIRED Z"
                 print "goal message: " + str(goal_message_field)
-                torso_goal = createBendGoal(goal_message_field.target_pose.pose.position.z + 0.05)
+                if RH2:
+                    torso_goal = createBendGoal(closest_table_posestamped.pose.position.z + 0.14)
+                else:
+                    torso_goal = createBendGoal(closest_table_posestamped.pose.position.z + 0.05)
                 self.torso_as.send_goal_and_wait(torso_goal)
                 print self.torso_as.get_result()
                 
                 print "=====Hands pose to open a lot"
-                initial_pose_g = createPlayMotionGoal(self.get_motion_from_width_and_height(0.2, goal_message_field.target_pose.pose.position.z + 0.1), skip_planning=True)
+                initial_pose_g = createPlayMotionGoal("pre_grasp", skip_planning=True)
                 self.play_motion_ac.send_goal_and_wait(initial_pose_g)
                 
                 print "====bend up to be safe"
-                torso_goal = createBendGoal(goal_message_field.target_pose.pose.position.z + 0.2)
+                torso_goal = createBendGoal(closest_table_posestamped.pose.position.z + 0.2)
                 self.torso_as.send_goal_and_wait(torso_goal)
                 print self.torso_as.get_result()
                 
@@ -514,7 +536,7 @@ class ObjectManipulationAS:
                 print "\n\n===Move back to be safe"
                 straight_req = StraightRequest()
                 straight_req.enable = True
-                straight_req.meters = -0.8
+                straight_req.meters = - (closest_table_x_border - 0.1)
                 self.straight_srv.call(straight_req)
                 
                 
@@ -672,6 +694,76 @@ class ObjectManipulationAS:
                 num_calls += 1
                 rospy.loginfo("Depth throttle server call #" + str(num_calls))
         if self.last_clusters == None:
+            return False
+        else:
+            return True
+
+    def get_pose_of_closest_table(self, input_pose):
+        """Get the PoseStamped and the Table msg of the closest table to adjust height of the placing
+        also return closest_table_x_border to approach the table"""
+        closest_table_posestamped = None
+        closest_tablemsg = None
+        closest_distance_z = 99999.9
+        closest_table_x_border = 99999.9
+        for mytable in self.last_tables.tables:
+            table_posestamped = PoseStamped(header=mytable.header, pose=mytable.pose)
+            if table_posestamped.header.frame_id != "base_link":
+                self.tf_listener.waitForTransform("base_link", table_posestamped.header.frame_id, table_posestamped.header.stamp, rospy.Duration(5))
+                table_pose = self.tf_listener.transformPose("base_link", table_posestamped)
+                closer_convex_hull_in_x = 99999.9
+                for convex_hull_point in mytable.convex_hull:
+                    def sum_Points(a,b):
+                        return Point(a.x + b.x, a.y + b.y, a.z  + b.z)
+                    # Stupid convex hull is referenced around the table "centroid"... this has made me lose much time!
+                    cv_p_pointstamped = PointStamped(header=mytable.header, point=sum_Points(convex_hull_point, mytable.pose.position))
+                    cv_p_base_link = self.tf_listener.transformPoint("base_link", cv_p_pointstamped)
+#                     def dist_xy(ax, ay, bx, by):
+#                         return math.sqrt(abs(ax-bx)**2 + abs(ay-by)**2)
+                    if cv_p_base_link.point.x < closer_convex_hull_in_x:
+                        closer_convex_hull_in_x = cv_p_base_link.point.x
+            else:
+                table_pose = table_posestamped
+                closer_convex_hull_in_x = 99999.9
+                for convex_hull_point in mytable.convex_hull:
+                    if convex_hull_point.x < closer_convex_hull_in_x:
+                        closer_convex_hull_in_x = convex_hull_point.x
+                
+            if closest_table_posestamped == None:
+                closest_table_posestamped = table_pose
+                closest_tablemsg = mytable
+                closest_distance_z = abs(table_pose.pose.position.z - input_pose.position.z)
+                closest_table_x_border = closer_convex_hull_in_x
+            else:
+                if abs(table_pose.pose.position.z - input_pose.position.z) < closest_distance_z:
+                    closest_distance_z = abs(table_pose.pose.position.z - input_pose.position.z)
+                    closest_table_posestamped = table_pose
+                    closest_tablemsg = mytable
+                    closest_table_x_border = closer_convex_hull_in_x
+        rospy.loginfo("Closest table is at pose: " + str(closest_table_posestamped))
+        rospy.loginfo("With closest convex hull x point at: " + str(closest_table_x_border))
+        return closest_tablemsg, closest_table_posestamped, closest_table_x_border
+
+    def wait_for_tables_array(self, wait_time=6, timeout_time=10):
+        """Ask for depth images until we get a table array
+        wait for wait_time between depth throttle calls
+        stop if timeout_time is achieved
+        If we don't find it in the correspondent time return false, true otherwise"""
+        initial_time = rospy.Time.now()
+        self.last_tables = None
+        count = 0
+        num_calls = 1
+        self.depth_service.call(EmptyRequest())
+        rospy.loginfo("Depth throttle server call #" + str(num_calls))
+        rospy.loginfo("Waiting for a table array...")
+        while rospy.Time.now() - initial_time < rospy.Duration(timeout_time) and self.last_tables == None:
+            rospy.sleep(0.1)
+            count += 1
+
+            if count >= wait_time / 10:
+                self.depth_service.call(EmptyRequest())
+                num_calls += 1
+                rospy.loginfo("Depth throttle server call #" + str(num_calls))
+        if self.last_tables == None:
             return False
         else:
             return True
