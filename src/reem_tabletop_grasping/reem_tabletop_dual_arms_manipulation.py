@@ -482,7 +482,7 @@ class ObjectManipulationAS:
             self.as_result = ObjectManipulationResult()
             goal_message_field = self.current_goal.get_goal()
             
-            if self.grasped_object or True:
+            if self.grasped_object:
                 print "Moving head down"
                 look_down_goal = createHeadGoal(0.0, 0.5, time=2.0)
                 self.head_as.send_goal_and_wait(look_down_goal)
