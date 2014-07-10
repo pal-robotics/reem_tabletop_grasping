@@ -287,6 +287,12 @@ class ObjectManipulationAS:
             print "object_pose is: " + str(object_pose) + "\n"
             print "objects dims are: " + str(obj_bbox_dims) + "\n"
             
+            if object_pose.pose.position.z < 0.5:
+                print "We can't grasp something so low, aborting"
+                self.update_aborted("Object too low, aborting")
+                return
+            
+            
             # Move to a correct orientation to just move straight
             print "\n====Moving to a position where we can just go straight forward to the distance we need"
             print "This position should be where we have a relative Y axis with the object to grasp ~= 0 "
