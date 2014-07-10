@@ -529,6 +529,10 @@ class ObjectManipulationAS:
                 self.torso_as.send_goal_and_wait(torso_goal)
                 print self.torso_as.get_result()
                 
+                print "Moving head up"
+                look_up_goal = createHeadGoal(0.0, -0.15, time=2.0)
+                self.head_as.send_goal_and_wait(look_up_goal)
+                
                 dg = DisableGoal(duration=10.0)
                 self.speedl_as.send_goal(dg)
                 self.speedl_as.wait_for_result(rospy.Duration(0.1))
