@@ -197,8 +197,8 @@ class ObjectManipulationAS:
         self.max_torso_rads = -0.18
         # X distance is 36cm at 0.00 rad and 43cm at 0.61 rad, so a variation of 7cm
         if RH2:
-            self.x_min = 0.34 + 0.04  # Magic calibration distance
-            self.x_max = 0.41 + 0.04
+            self.x_min = 0.34 #+ 0.04  # Magic calibration distance
+            self.x_max = 0.41 #+ 0.04
         else:
             self.x_min = 0.34 - 0.1  # Magic calibration distance
             self.x_max = 0.41 - 0.1
@@ -281,7 +281,16 @@ class ObjectManipulationAS:
                 self.to_grasp_object_pose_pub.publish(goal_message_field.target_pose)
             self.update_feedback("Detecting clusters")
 
-            object_pose, obj_bbox_dims = self.detect_object(goal_message_field.target_pose)
+            print "Best object given is"
+            object_pose, obj_bbox_dims = self.detect_raytraced_object(goal_message_field.target_pose)
+            print object_pose
+            print obj_bbox_dims
+            
+            if DEBUG_MODE:
+                self.to_grasp_object_pose_pub.publish(object_pose)
+            print "Exiting"
+            return
+            #object_pose, obj_bbox_dims = self.detect_object(goal_message_field.target_pose)
             
             
             print "object_pose is: " + str(object_pose) + "\n"
@@ -467,6 +476,44 @@ class ObjectManipulationAS:
         (closest_cluster_id, (object_points, obj_bbox_dims, object_bounding_box, object_pose)) = self.get_id_of_closest_cluster_to_pose(object_to_grasp_pose)
 
         rospy.logdebug("in AS: Closest cluster id is: " + str(closest_cluster_id))
+        #TODO visualize bbox
+        #TODO publish filtered pointcloud?
+        print "BBOX: " + str(obj_bbox_dims) 
+        ########
+        #self.update_feedback("Check reachability")
+        # Given the bounding box... 
+        
+        # shift object pose up by halfway, clustering code gives obj frame on the bottom because of too much noise on the table cropping (2 1pixel lines behind the objects)
+        # TODO remove this hack, fix it in table filtering
+        object_pose.pose.position.z += obj_bbox_dims[2] / 2.0
+        #object_pose.pose.position.y += 0.03 # RH3 needs an offset as of today to actually grasp the objects
+        return object_pose, obj_bbox_dims
+
+    def detect_raytraced_object(self, target_pose):
+        """Given a posestamped target_pose search the best cluster to that pose raytracing from the camera frame to the object"""
+        if not self.wait_for_recognized_array(wait_time=5, timeout_time=10):  # wait until we get clusters published
+            self.update_aborted("Failed detecting clusters")
+        
+        # Search closer cluster
+        # transform pose to base_link if needed
+        if target_pose.header.frame_id != "head_mount_xtion_rgb_optical_frame":
+            n_tries = 3
+            while n_tries > 0:
+                try:
+                    print "Try " + str(n_tries) + " of transforming... (5s wait for transform)"
+                    target_pose.header.stamp = rospy.Time.now()
+                    self.tf_listener.waitForTransform("head_mount_xtion_rgb_optical_frame", target_pose.header.frame_id, target_pose.header.stamp, rospy.Duration(5))
+                    object_to_grasp_pose = self.tf_listener.transformPose("head_mount_xtion_rgb_optical_frame", target_pose)
+                    n_tries = 0
+                except:
+                    n_tries -= 1
+        else:
+            object_to_grasp_pose = target_pose.pose
+
+        self.update_feedback("Searching best cluster while clustering")
+        (closest_cluster_id, (object_points, obj_bbox_dims, object_bounding_box, object_pose)) = self.get_id_of_cluster_in_ray_to_obj_bbox(object_to_grasp_pose)
+
+        rospy.logdebug("in AS: Best cluster id is: " + str(closest_cluster_id))
         #TODO visualize bbox
         #TODO publish filtered pointcloud?
         print "BBOX: " + str(obj_bbox_dims) 
@@ -682,6 +729,34 @@ class ObjectManipulationAS:
         rospy.loginfo("Closest id is: " + str(closest_id) + " at " + str(closest_pose))
         return closest_id, (closest_object_points, closest_bbox_dims, closest_bbox_dims, closest_pose)
 
+    def get_id_of_cluster_in_ray_to_obj_bbox(self, input_pose):
+        """Given an input pose (the obj recognition one pressumably)
+        we will compute if there is a collision between the vector
+        and the bounding box... if there are more than one, we will get the closest one"""
+        current_id = 0
+        best_id = 0
+        best_pose = None
+        best_object_points = None
+        best_bbox = None
+        best_bbox_dims = None
+        for myobject in self.last_clusters.objects:
+            (object_points, obj_bbox_dims, object_bounding_box, object_pose) = self.cbbf.find_object_frame_and_bounding_box(myobject.point_clouds[0])
+            print "obj_bbox_dims is: " + str(obj_bbox_dims)
+            mybbx = self.bbox_3D_from_point_and_bbx(object_pose.pose.position, obj_bbox_dims)
+            if self.vector_crosses_bbox(object_pose.pose.position, mybbx):
+                print "Vector crosses bbox!"
+                best_id = current_id
+                best_pose = object_pose
+                best_object_points = object_points
+                best_bbox = object_bounding_box
+                best_bbox_dims = obj_bbox_dims
+                
+            else:
+                print "No! Vector does not cross bbox"
+            current_id += 1
+        rospy.loginfo("Best id is: " + str(best_id) + " at " + str(best_pose))
+        return best_id, (best_object_points, best_bbox_dims, best_bbox_dims, best_pose)
+    
 
     def wait_for_recognized_array(self, wait_time=6, timeout_time=10):
         """Ask for depth images until we get a recognized array
@@ -824,4 +899,105 @@ class ObjectManipulationAS:
         print "After *-1"
         print angle_to_turn
         return angle_to_turn
+       
+       
+       
+    def normalize_3d_vector(self, vector):
+        """Normalize a 3d vector, make it unitary
+        vector is a Point
+        @return Point normalized"""
+        magnitude = math.sqrt(vector.x**2 + vector.y**2 + vector.z**2)
+        return Point(vector.x/magnitude, vector.y/magnitude, vector.z/magnitude)
+    
+    
+    def vector_crosses_bbox(self, r, bbox):
+        """Given a vector in 3D 'r' (as ROS Point) space and a Bounding Box 
+        (as list of 2 Point) in the 
+        same reference frame return wether the vector crosses (in front)
+        the bounding box
+        from http://gamedev.stackexchange.com/questions/18436/most-efficient-aabb-vs-ray-collision-algorithms"""
+        # TODO: do unit vector of r if its not
+        r = self.normalize_3d_vector(r)
+        # r is unit direction vector of ray
+        dirfrac = Point()
+        dirfrac.x = 1.0 / r.x
+        dirfrac.y = 1.0 / r.y
+        dirfrac.z = 1.0 / r.z
+        # lb is the corner of AABB with minimal coordinates - left bottom, rt is maximal corner
+        # r.org is origin of ray
+        # r.org is always 0 for this case 
+        rorg = Point()
+        lb = Point(*bbox[0])
+        rt = Point(*bbox[1])
+        t1 = (lb.x - rorg.x)*dirfrac.x
+        t2 = (rt.x - rorg.x)*dirfrac.x
+        t3 = (lb.y - rorg.y)*dirfrac.y
+        t4 = (rt.y - rorg.y)*dirfrac.y
+        t5 = (lb.z - rorg.z)*dirfrac.z
+        t6 = (rt.z - rorg.z)*dirfrac.z
         
+        tmin = max(max(min(t1, t2), min(t3, t4)), min(t5, t6))
+        tmax = min(min(max(t1, t2), max(t3, t4)), max(t5, t6))
+        
+        # if tmax < 0, ray (line) is intersecting AABB, but whole AABB is behing us
+        if tmax < 0:
+            t = tmax
+            return False
+        
+        # if tmin > tmax, ray doesn't intersect AABB
+        if tmin > tmax:
+            t = tmax
+            return False
+        
+        t = tmin
+        return True
+    
+    def bbox_3D_from_point_and_bbx(self, point, bbx):
+        """Given a Point and it's bbx return the bbx in reference to this point"""
+        newbbx = [[0.0,0.0,0.0],[0.0,0.0,0.0]]
+        newbbx[0][0] = bbx[0] - (point.x / 2.0)
+        newbbx[0][1] = bbx[1] - (point.y / 2.0)
+        newbbx[0][2] = bbx[2] - (point.z / 2.0)
+        
+        newbbx[1][0] = bbx[0] + (point.x / 2.0)
+        newbbx[1][1] = bbx[1] + (point.y / 2.0)
+        newbbx[1][2] = bbx[2] + (point.z / 2.0)
+        
+        return newbbx
+    
+    
+#     def arrow_from_vec(vec):
+#         global id_marker
+#         id_marker += 1
+#         marrow = Marker()
+#         marrow.action = Marker.ADD
+#         marrow.id = id_marker
+#         marrow.header.frame_id = 'base_link'
+#         marrow.header.stamp = rospy.Time.now()
+#         marrow.type = Marker.ARROW
+#         marrow.scale.x = 0.1
+#         marrow.scale.y = 0.1
+#         marrow.scale.z = 0.1
+#         marrow.points.append(Point())
+#         marrow.points.append(vec)
+#         marrow.color.a = 1.0
+#         marrow.color.b = 1.0
+#         return marrow
+#     
+#     def box_from_point_and_bbx(point, bbx):
+#         global id_marker
+#         id_marker += 1
+#         mbox = Marker()
+#         mbox.action = Marker.ADD
+#         mbox.id = id_marker
+#         mbox.header.frame_id = 'base_link'
+#         mbox.header.stamp = rospy.Time.now()
+#         mbox.type = Marker.CUBE
+#         mbox.scale.x = 1.0
+#         mbox.scale.y = 1.0
+#         mbox.scale.z = 1.0
+#         mbox.color.a = 1.0
+#         marrow.color.g = 1.0
+#         mbox.pose.position = objpoint
+#         mbox.scale = Point(*bbx[1])
+#         return mbox 
