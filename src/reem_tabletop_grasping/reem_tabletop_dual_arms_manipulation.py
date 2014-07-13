@@ -197,8 +197,8 @@ class ObjectManipulationAS:
         self.max_torso_rads = -0.18
         # X distance is 36cm at 0.00 rad and 43cm at 0.61 rad, so a variation of 7cm
         if RH2:
-            self.x_min = 0.34 + 0.04  # Magic calibration distance
-            self.x_max = 0.41 + 0.04
+            self.x_min = 0.34 - 0.07  # Magic calibration distance
+            self.x_max = 0.41 - 0.07
         else:
             self.x_min = 0.34 - 0.1  # Magic calibration distance
             self.x_max = 0.41 - 0.1
@@ -392,7 +392,7 @@ class ObjectManipulationAS:
             
             # Bend torso down as necessary
             print "\n===Bending torso down to the necessary height"
-            torso_goal = createBendGoal(object_pose.pose.position.z + 0.06)
+            torso_goal = createBendGoal(object_pose.pose.position.z + 0.11)
             self.torso_as.send_goal_and_wait(torso_goal)
             print self.torso_as.get_result()
             
@@ -418,6 +418,11 @@ class ObjectManipulationAS:
             torso_goal = createBendGoal(object_pose.pose.position.z + 0.2)
             self.torso_as.send_goal_and_wait(torso_goal)
             print self.torso_as.get_result()
+
+            print "Moving head up"
+            look_up_goal = createHeadGoal(0.0, -0.15, time=2.0)
+            self.head_as.send_goal_and_wait(look_up_goal)
+
 
             # Let the robot move freely
             dg = DisableGoal(duration=15.0)
@@ -561,7 +566,7 @@ class ObjectManipulationAS:
                 # MOVE ARMS TO HOME
                 print "\n====Moving arms to home" 
                 home_g = createPlayMotionGoal("home")
-                self.play_motion_ac.send_goal_and_wait(home_g)
+                self.play_motion_ac.send_goal_and_wait(home_g, skip_planning=True)
                 
             else:
                 rospy.logerr("No grasped object to place!!")
